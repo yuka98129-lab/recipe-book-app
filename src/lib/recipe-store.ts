@@ -1,5 +1,5 @@
 import { DEFAULT_CATEGORIES } from "./constants";
-import type { Recipe, RecipeInput } from "./types";
+import type { Ingredient, Recipe, RecipeInput } from "./types";
 
 // localStorage への唯一の窓口。UI は保存形式を知らない。
 const RECIPES_KEY = "recipes:v1";
@@ -16,7 +16,10 @@ const EMPTY: StoreSnapshot = { recipes: [], categories: DEFAULT_CATEGORIES };
 let cache: StoreSnapshot | null = null;
 const listeners = new Set<() => void>();
 
-function isRecipe(v: unknown): v is Recipe {
+/** 保存済みデータの形。seasonings は後から追加したため、古いレシピには無い */
+type StoredRecipe = Omit<Recipe, "seasonings"> & { seasonings?: Ingredient[] };
+
+function isRecipe(v: unknown): v is StoredRecipe {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
   return (
@@ -44,8 +47,14 @@ const mergeCategories = (custom: string[]) => [
   ...custom.filter((c) => !DEFAULT_CATEGORIES.includes(c)),
 ];
 
+// 古いレシピ(調味料が未入力・項目自体がない)も新しい形で扱えるようにする
+const normalize = (r: StoredRecipe): Recipe => ({
+  ...r,
+  seasonings: Array.isArray(r.seasonings) ? r.seasonings : [],
+});
+
 function load(): StoreSnapshot {
-  const recipes = readArray(RECIPES_KEY).filter(isRecipe);
+  const recipes = readArray(RECIPES_KEY).filter(isRecipe).map(normalize);
   const custom = readArray(CATEGORIES_KEY).filter(
     (c): c is string => typeof c === "string",
   );

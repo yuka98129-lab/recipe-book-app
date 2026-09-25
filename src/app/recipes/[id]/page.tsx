@@ -7,6 +7,23 @@ import { RecipeForm } from "@/components/RecipeForm";
 import { TagChip } from "@/components/TagChip";
 import { useRecipes } from "@/hooks/use-recipes";
 import { deleteRecipe, updateRecipe } from "@/lib/recipe-store";
+import type { Ingredient } from "@/lib/types";
+
+function IngredientSection({ title, items }: { title: string; items: Ingredient[] }) {
+  return (
+    <section>
+      <h2 className="mb-2 font-semibold">{title}</h2>
+      <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white">
+        {items.map((ing, i) => (
+          <li key={i} className="flex justify-between gap-4 px-4 py-2">
+            <span className="min-w-0 break-words">{ing.name}</span>
+            <span className="shrink-0 text-right text-stone-600">{ing.quantity}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export default function RecipeDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -68,17 +85,11 @@ export default function RecipeDetailPage() {
         )}
       </header>
 
-      <section>
-        <h2 className="mb-2 font-semibold">材料</h2>
-        <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white">
-          {recipe.ingredients.map((ing, i) => (
-            <li key={i} className="flex justify-between gap-4 px-4 py-2">
-              <span className="min-w-0 break-words">{ing.name}</span>
-              <span className="shrink-0 text-right text-stone-600">{ing.quantity}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <IngredientSection title="材料" items={recipe.ingredients} />
+      {/* 調味料が未入力のレシピでは、空の見出しを出さない */}
+      {recipe.seasonings.length > 0 && (
+        <IngredientSection title="調味料" items={recipe.seasonings} />
+      )}
 
       <section>
         <h2 className="mb-2 font-semibold">手順</h2>

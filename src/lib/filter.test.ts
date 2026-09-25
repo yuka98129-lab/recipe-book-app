@@ -8,6 +8,7 @@ const recipe = (name: string, category: string, tags: string[]): Recipe => ({
   category,
   tags,
   ingredients: [],
+  seasonings: [],
   steps: [],
   createdAt: 0,
 });

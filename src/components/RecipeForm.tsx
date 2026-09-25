@@ -25,6 +25,74 @@ const removeBtnClass =
   "flex w-10 shrink-0 items-center justify-center px-2 text-stone-500 hover:text-red-600 disabled:opacity-30 sm:block sm:w-auto";
 const addLinkClass = "mt-2 py-2 text-sm text-orange-700 underline sm:py-0";
 
+type IngredientRowsProps = {
+  /** 見出し・各入力の aria-label・追加リンクに使う(「材料」「調味料」) */
+  label: string;
+  hint?: string;
+  rows: Ingredient[];
+  onChange: (rows: Ingredient[]) => void;
+  namePlaceholder: string;
+  quantityPlaceholder: string;
+};
+
+/** 名前と分量の行を追加・削除できる入力欄。材料と調味料で共用する */
+function IngredientRows({
+  label,
+  hint,
+  rows,
+  onChange,
+  namePlaceholder,
+  quantityPlaceholder,
+}: IngredientRowsProps) {
+  const update = (i: number, patch: Partial<Ingredient>) =>
+    onChange(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+
+  return (
+    <div>
+      <p className="mb-1 text-sm font-medium">
+        {label}
+        {hint && <span className="ml-2 text-xs font-normal text-stone-500">{hint}</span>}
+      </p>
+      <div className="space-y-2">
+        {rows.map((row, i) => (
+          <div key={i} className="flex gap-2">
+            <input
+              value={row.name}
+              onChange={(e) => update(i, { name: e.target.value })}
+              placeholder={namePlaceholder}
+              aria-label={`${label}${i + 1}の名前`}
+              className={`min-w-0 flex-1 ${inputBase}`}
+            />
+            <input
+              value={row.quantity}
+              onChange={(e) => update(i, { quantity: e.target.value })}
+              placeholder={quantityPlaceholder}
+              aria-label={`${label}${i + 1}の分量`}
+              className={`w-32 shrink-0 ${inputBase} sm:w-40`}
+            />
+            <button
+              type="button"
+              onClick={() => onChange(rows.filter((_, j) => j !== i))}
+              disabled={rows.length === 1}
+              aria-label={`${label}${i + 1}を削除`}
+              className={removeBtnClass}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange([...rows, { name: "", quantity: "" }])}
+        className={addLinkClass}
+      >
+        ＋ {label}を追加
+      </button>
+    </div>
+  );
+}
+
 export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
   const { recipes, categories } = useRecipes();
 
@@ -35,6 +103,10 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
   const [tagInput, setTagInput] = useState("");
   const [ingredients, setIngredients] = useState<Ingredient[]>(
     initial?.ingredients.length ? initial.ingredients : [{ name: "", quantity: "" }],
+  );
+  // 調味料が未入力の既存レシピは、空の1行から始める
+  const [seasonings, setSeasonings] = useState<Ingredient[]>(
+    initial?.seasonings?.length ? initial.seasonings : [{ name: "", quantity: "" }],
   );
   const [steps, setSteps] = useState<string[]>(
     initial?.steps.length ? initial.steps : [""],
@@ -66,9 +138,12 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     e.preventDefault();
 
     const finalCategory = (addingCategory ? newCategory : category).trim();
-    const cleanIngredients = ingredients
-      .map((i) => ({ name: i.name.trim(), quantity: i.quantity.trim() }))
-      .filter((i) => i.name);
+    const cleanRows = (rows: Ingredient[]) =>
+      rows
+        .map((i) => ({ name: i.name.trim(), quantity: i.quantity.trim() }))
+        .filter((i) => i.name);
+    const cleanIngredients = cleanRows(ingredients);
+    const cleanSeasonings = cleanRows(seasonings);
     const cleanSteps = steps.map((s) => s.trim()).filter(Boolean);
 
     if (!name.trim()) return setError("料理名を入力してください。");
@@ -82,6 +157,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         category: finalCategory,
         tags,
         ingredients: cleanIngredients,
+        seasonings: cleanSeasonings,
         steps: cleanSteps,
       });
     } catch (err) {
@@ -194,53 +270,22 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         </div>
       </div>
 
-      <div>
-        <p className="mb-1 text-sm font-medium">材料</p>
-        <div className="space-y-2">
-          {ingredients.map((ing, i) => (
-            <div key={i} className="flex gap-2">
-              <input
-                value={ing.name}
-                onChange={(e) =>
-                  setIngredients(
-                    ingredients.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
-                  )
-                }
-                placeholder="例: 玉ねぎ"
-                aria-label={`材料${i + 1}の名前`}
-                className={`min-w-0 flex-1 ${inputBase}`}
-              />
-              <input
-                value={ing.quantity}
-                onChange={(e) =>
-                  setIngredients(
-                    ingredients.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)),
-                  )
-                }
-                placeholder="例: 1個"
-                aria-label={`材料${i + 1}の分量`}
-                className={`w-32 shrink-0 ${inputBase} sm:w-40`}
-              />
-              <button
-                type="button"
-                onClick={() => setIngredients(ingredients.filter((_, j) => j !== i))}
-                disabled={ingredients.length === 1}
-                aria-label={`材料${i + 1}を削除`}
-                className={removeBtnClass}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setIngredients([...ingredients, { name: "", quantity: "" }])}
-          className={addLinkClass}
-        >
-          ＋ 材料を追加
-        </button>
-      </div>
+      <IngredientRows
+        label="材料"
+        rows={ingredients}
+        onChange={setIngredients}
+        namePlaceholder="例: 玉ねぎ"
+        quantityPlaceholder="例: 1個"
+      />
+
+      <IngredientRows
+        label="調味料"
+        hint="任意"
+        rows={seasonings}
+        onChange={setSeasonings}
+        namePlaceholder="例: しょうゆ"
+        quantityPlaceholder="例: 大さじ1"
+      />
 
       <div>
         <p className="mb-1 text-sm font-medium">手順</p>

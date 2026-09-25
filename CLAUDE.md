@@ -38,7 +38,8 @@ A personal recipe book app ("レシピ帳") for people who forget recipes they f
 - **Categories** start from `DEFAULT_CATEGORIES` in `src/lib/constants.ts`; users add more via "＋ 新しいカテゴリーを追加" in the form, and the store persists them when a recipe using them is saved. The home filter only lists categories/tags that are in use.
 - **A recipe holds at most `MAX_TAGS` (3) tags**, enforced in `RecipeForm`. Tags are free text with suggestions.
 - **Edit happens inside the detail page** (`/recipes/[id]` toggles to `RecipeForm`), not on a separate route, to keep the screen flow at two levels: Top → create / detail. Do not add deeper navigation.
-- Ingredients are stored as `{ name, quantity }` rather than free text, so a future shopping-list feature can sum quantities across recipes.
+- Ingredients (`ingredients`) and seasonings (`seasonings`) are both stored as `{ name, quantity }` rather than free text, so a future shopping-list feature can sum quantities across recipes. The form shares one `IngredientRows` component for both.
+- **`seasonings` was added after recipes were already being saved**, so stored recipes may lack it. `recipe-store.ts` fills in `[]` when loading (`normalize`), so the rest of the app can treat `Recipe.seasonings` as always present. The storage key stays `recipes:v1` because the change is additive; only bump it for a breaking change. The detail page hides the 調味料 section when it is empty.
 
 ## Out of scope
 

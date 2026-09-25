@@ -13,6 +13,7 @@ const input = (over: Partial<RecipeInput> = {}): RecipeInput => ({
   category: "主食",
   tags: ["時短"],
   ingredients: [{ name: "卵", quantity: "3個" }],
+  seasonings: [],
   steps: ["煮る"],
   ...over,
 });
@@ -42,7 +43,7 @@ describe("recipe-store: 読み込み", () => {
     const valid = { id: "a", name: "x", category: "主菜", tags: [], ingredients: [], steps: [], createdAt: 1 };
     localStorage.setItem("recipes:v1", JSON.stringify([valid, { id: 1 }, null, "str"]));
     const store = await loadStore();
-    expect(store.getSnapshot().recipes).toEqual([valid]);
+    expect(store.getSnapshot().recipes).toEqual([{ ...valid, seasonings: [] }]);
   });
 
   it("保存済みの追加カテゴリーを初期カテゴリーの後ろに並べる", async () => {
@@ -55,6 +56,79 @@ describe("recipe-store: 読み込み", () => {
     const store = await loadStore();
     expect(store.getSnapshot()).toBe(store.getSnapshot());
     expect(store.getServerSnapshot()).toBe(store.getServerSnapshot());
+  });
+});
+
+describe("recipe-store: 調味料(既存レシピとの互換性)", () => {
+  const legacy = {
+    id: "old",
+    name: "調味料追加前のレシピ",
+    category: "主菜",
+    tags: [],
+    ingredients: [{ name: "卵", quantity: "3個" }],
+    steps: ["焼く"],
+    createdAt: 1,
+  };
+
+  it("seasonings のない保存済みレシピは、調味料が空のレシピとして読み込める", async () => {
+    localStorage.setItem("recipes:v1", JSON.stringify([legacy]));
+    const store = await loadStore();
+    expect(store.getSnapshot().recipes).toEqual([{ ...legacy, seasonings: [] }]);
+  });
+
+  it("seasonings が配列でない不正な値も [] として扱う", async () => {
+    localStorage.setItem("recipes:v1", JSON.stringify([{ ...legacy, seasonings: "しょうゆ" }]));
+    const store = await loadStore();
+    expect(store.getSnapshot().recipes[0].seasonings).toEqual([]);
+  });
+
+  it("保存済みの調味料はそのまま読み込める", async () => {
+    const seasonings = [{ name: "しょうゆ", quantity: "大さじ1" }];
+    localStorage.setItem("recipes:v1", JSON.stringify([{ ...legacy, seasonings }]));
+    const store = await loadStore();
+    expect(store.getSnapshot().recipes[0].seasonings).toEqual(seasonings);
+  });
+
+  it("addRecipe は材料と調味料を別々に保存する", async () => {
+    const store = await loadStore();
+    store.addRecipe(
+      input({ seasonings: [{ name: "塩", quantity: "少々" }] }),
+    );
+
+    const stored = JSON.parse(localStorage.getItem("recipes:v1")!)[0];
+    expect(stored.ingredients).toEqual([{ name: "卵", quantity: "3個" }]);
+    expect(stored.seasonings).toEqual([{ name: "塩", quantity: "少々" }]);
+  });
+
+  it("古いレシピを編集して調味料を追加でき、他の項目は保たれる", async () => {
+    localStorage.setItem("recipes:v1", JSON.stringify([legacy]));
+    const store = await loadStore();
+
+    store.updateRecipe(
+      "old",
+      input({
+        name: legacy.name,
+        category: legacy.category,
+        ingredients: legacy.ingredients,
+        steps: legacy.steps,
+        seasonings: [{ name: "しょうゆ", quantity: "大さじ1" }],
+      }),
+    );
+
+    const stored = JSON.parse(localStorage.getItem("recipes:v1")!)[0];
+    expect(stored).toMatchObject({
+      id: "old",
+      createdAt: 1,
+      ingredients: legacy.ingredients,
+      seasonings: [{ name: "しょうゆ", quantity: "大さじ1" }],
+    });
+  });
+
+  it("調味料が未入力のまま古いレシピを編集しても、空の調味料として保存される", async () => {
+    localStorage.setItem("recipes:v1", JSON.stringify([legacy]));
+    const store = await loadStore();
+    store.updateRecipe("old", input({ name: "名前だけ変更" }));
+    expect(JSON.parse(localStorage.getItem("recipes:v1")!)[0].seasonings).toEqual([]);
   });
 });
 
@@ -148,7 +222,7 @@ describe("recipe-store: 購読", () => {
     window.dispatchEvent(new StorageEvent("storage", { key: "recipes:v1" }));
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(store.getSnapshot().recipes).toEqual([fromOtherTab]);
+    expect(store.getSnapshot().recipes).toEqual([{ ...fromOtherTab, seasonings: [] }]);
   });
 
   it("無関係なキーの storage イベントは無視する", async () => {
