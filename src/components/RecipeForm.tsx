@@ -206,7 +206,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
                     ingredients.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
                   )
                 }
-                placeholder="材料名(例: 玉ねぎ)"
+                placeholder="例: 玉ねぎ"
                 aria-label={`材料${i + 1}の名前`}
                 className={`min-w-0 flex-1 ${inputBase}`}
               />
@@ -219,7 +219,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
                 }
                 placeholder="例: 1個"
                 aria-label={`材料${i + 1}の分量`}
-                className={`w-28 shrink-0 ${inputBase} sm:w-40`}
+                className={`w-32 shrink-0 ${inputBase} sm:w-40`}
               />
               <button
                 type="button"

@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# レシピ帳
 
-## Getting Started
+見つけたレシピを材料・手順つきで保存し、カテゴリーだけでなく「時短」「ダイエット」「栄養重視」などの**用途タグ**でも探せる、レシピを覚えられない人のためのレシピ帳アプリです。
 
-First, run the development server:
+「今日は時間がない」「痩せたい」「栄養を摂りたい」といったその時々の目的に合わせて、保存したレシピをすぐに見つけられることを目指しています。
+
+## 技術スタック
+
+- [Next.js](https://nextjs.org/) 16(App Router)/ React 19 / TypeScript
+- [Tailwind CSS](https://tailwindcss.com/) v4
+- データ保存: ブラウザの **localStorage** のみ(サーバー・外部DBは使いません)
+- テスト: [Vitest](https://vitest.dev/)
+
+## 主な機能
+
+- **レシピの登録・編集・削除**: 料理名、カテゴリー、用途タグ、材料(名前と分量)、手順を保存できます。
+- **用途タグ**: 「時短」「ダイエット」「栄養重視」「簡単」「節約」の候補から選ぶか、自由に入力できます。1つのレシピに付けられるのは最大3個です。
+- **カテゴリー**: 主菜・副菜・汁物・主食・デザートから選べます。登録時に「新しいカテゴリーを追加」して増やすこともできます。
+- **絞り込み**: カテゴリーと用途タグで絞り込めます。タグは複数選択でき、選んだタグをすべて含むレシピだけを表示します。
+- **検索**: 料理名またはタグで検索できます(全角・半角の違いは区別しません)。
+- **レシピ詳細**: 材料と手順をまとめて表示します。
+- **スマホ表示**: スマホの画面幅でも使えるようにレイアウトを調整しています。
+
+絞り込みや検索の条件は URL に保持されるので、詳細画面から戻っても状態が保たれます。
+
+## 起動方法
+
+Node.js と npm が必要です(開発は Node.js 24 で確認しています)。
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 をブラウザで開きます(ポートが使用中の場合は、起動時のログに表示される別のポートになります)。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+その他のコマンド:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| コマンド | 内容 |
+|---|---|
+| `npm run build` / `npm start` | 本番ビルド / 本番サーバーの起動 |
+| `npm run lint` | ESLint による静的解析 |
+| `npm test` | Vitest による単体テスト(`npm run test:watch` でウォッチ) |
 
-## Learn More
+## データの保存について
 
-To learn more about Next.js, take a look at the following resources:
+レシピはお使いのブラウザの localStorage にだけ保存され、外部には送信されません。そのため次の点にご注意ください。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- 別のブラウザや別の端末とは共有されません。
+- ブラウザのサイトデータを削除すると、保存したレシピも消えます。
+- URL のオリジン(ホスト名・ポート)が異なると、別のデータとして扱われます(例: `localhost:3000` と `localhost:3001`)。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 今後の検討(対象外)
 
-## Deploy on Vercel
+- 動画(Instagram / TikTok など)からのレシピ自動抽出
+- 複数レシピの材料を合算した買い物リスト
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+詳しい要件は [requirements.md](./requirements.md) を参照してください。
