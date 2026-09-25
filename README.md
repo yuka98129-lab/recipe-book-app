@@ -4,6 +4,12 @@
 
 「今日は時間がない」「痩せたい」「栄養を摂りたい」といったその時々の目的に合わせて、保存したレシピをすぐに見つけられることを目指しています。
 
+## 公開URL
+
+https://recipe-book-app-nu.vercel.app
+
+Vercel にデプロイしています。データはお使いのブラウザにだけ保存されます。
+
 ## 技術スタック
 
 - [Next.js](https://nextjs.org/) 16(App Router)/ React 19 / TypeScript
