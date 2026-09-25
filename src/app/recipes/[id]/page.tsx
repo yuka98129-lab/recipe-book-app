@@ -90,6 +90,10 @@ export default function RecipeDetailPage() {
       {recipe.seasonings.length > 0 && (
         <IngredientSection title="調味料" items={recipe.seasonings} />
       )}
+      {/* ユーザーが追加したグループ(トッピングなど)。グループ名を見出しにする */}
+      {recipe.extraGroups.map((group, i) => (
+        <IngredientSection key={i} title={group.name} items={group.items} />
+      ))}
 
       <section>
         <h2 className="mb-2 font-semibold">手順</h2>

@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRecipes } from "@/hooks/use-recipes";
 import { MAX_TAGS, SUGGESTED_TAGS } from "@/lib/constants";
-import type { Ingredient, Recipe, RecipeInput } from "@/lib/types";
+import { cleanExtraGroups, cleanRows, nextRowAfter } from "@/lib/ingredient-groups";
+import { isPlainEnter } from "@/lib/keyboard";
+import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "@/lib/types";
 import { TagChip } from "./TagChip";
 
 const NEW_CATEGORY = "__new__";
@@ -26,55 +28,97 @@ const removeBtnClass =
 const addLinkClass = "mt-2 py-2 text-sm text-orange-700 underline sm:py-0";
 
 type IngredientRowsProps = {
-  /** 見出し・各入力の aria-label・追加リンクに使う(「材料」「調味料」) */
+  /** 見出しの代わりに使う名前(「材料」「調味料」、追加グループの名前)。省略できない */
   label: string;
+  /** 追加リンクの対象の呼び名。省略時は label(追加グループは名前が長くなり得るので「行」にする) */
+  addLabel?: string;
+  /** 各入力の aria-label の接頭辞。省略時は label。追加グループはグループ名が固定枠と重なっても区別できるよう別に指定する */
+  ariaPrefix?: string;
   hint?: string;
+  /** 見出しの表示を差し替える(追加グループでは名前の入力欄にする)。省略すると label を表示 */
+  title?: ReactNode;
   rows: Ingredient[];
   onChange: (rows: Ingredient[]) => void;
   namePlaceholder: string;
   quantityPlaceholder: string;
 };
 
-/** 名前と分量の行を追加・削除できる入力欄。材料と調味料で共用する */
+/** 名前と分量の行を追加・削除できる入力欄。材料・調味料・追加グループで共用する */
 function IngredientRows({
   label,
+  addLabel = label,
+  ariaPrefix = label,
   hint,
+  title,
   rows,
   onChange,
   namePlaceholder,
   quantityPlaceholder,
 }: IngredientRowsProps) {
+  const nameInputs = useRef<(HTMLInputElement | null)[]>([]);
+  // Enter で行を足した直後は、描画が終わってから新しい行の名前欄へカーソルを移す
+  const pendingFocus = useRef<number | null>(null);
+  useEffect(() => {
+    if (pendingFocus.current === null) return;
+    nameInputs.current[pendingFocus.current]?.focus();
+    pendingFocus.current = null;
+  }, [rows]);
+
   const update = (i: number, patch: Partial<Ingredient>) =>
     onChange(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
+  function handleKeyDown(e: React.KeyboardEvent, i: number) {
+    if (e.key !== "Enter") return;
+    // Enter でフォーム全体が送信されないようにする(変換確定の Enter も同様)
+    e.preventDefault();
+    // 日本語入力の変換を確定する Enter は、行の追加として扱わない
+    if (!isPlainEnter(e)) return;
+
+    const next = nextRowAfter(rows, i);
+    if (!next) return; // 空欄の行では増やさない
+    if (next.rows === rows) {
+      nameInputs.current[next.focusIndex]?.focus();
+    } else {
+      pendingFocus.current = next.focusIndex;
+      onChange(next.rows);
+    }
+  }
+
   return (
     <div>
-      <p className="mb-1 text-sm font-medium">
-        {label}
-        {hint && <span className="ml-2 text-xs font-normal text-stone-500">{hint}</span>}
-      </p>
+      {title ?? (
+        <p className="mb-1 text-sm font-medium">
+          {label}
+          {hint && <span className="ml-2 text-xs font-normal text-stone-500">{hint}</span>}
+        </p>
+      )}
       <div className="space-y-2">
         {rows.map((row, i) => (
           <div key={i} className="flex gap-2">
             <input
+              ref={(el) => {
+                nameInputs.current[i] = el;
+              }}
               value={row.name}
               onChange={(e) => update(i, { name: e.target.value })}
+              onKeyDown={(e) => handleKeyDown(e, i)}
               placeholder={namePlaceholder}
-              aria-label={`${label}${i + 1}の名前`}
+              aria-label={`${ariaPrefix}${i + 1}の名前`}
               className={`min-w-0 flex-1 ${inputBase}`}
             />
             <input
               value={row.quantity}
               onChange={(e) => update(i, { quantity: e.target.value })}
+              onKeyDown={(e) => handleKeyDown(e, i)}
               placeholder={quantityPlaceholder}
-              aria-label={`${label}${i + 1}の分量`}
+              aria-label={`${ariaPrefix}${i + 1}の分量`}
               className={`w-32 shrink-0 ${inputBase} sm:w-40`}
             />
             <button
               type="button"
               onClick={() => onChange(rows.filter((_, j) => j !== i))}
               disabled={rows.length === 1}
-              aria-label={`${label}${i + 1}を削除`}
+              aria-label={`${ariaPrefix}${i + 1}を削除`}
               className={removeBtnClass}
             >
               ✕
@@ -87,7 +131,7 @@ function IngredientRows({
         onClick={() => onChange([...rows, { name: "", quantity: "" }])}
         className={addLinkClass}
       >
-        ＋ {label}を追加
+        ＋ {addLabel}を追加
       </button>
     </div>
   );
@@ -107,6 +151,10 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
   // 調味料が未入力の既存レシピは、空の1行から始める
   const [seasonings, setSeasonings] = useState<Ingredient[]>(
     initial?.seasonings?.length ? initial.seasonings : [{ name: "", quantity: "" }],
+  );
+  // ユーザーが名前を付けて追加する材料グループ(レシピのカテゴリーとは別のもの)
+  const [extraGroups, setExtraGroups] = useState<IngredientGroup[]>(
+    initial?.extraGroups ?? [],
   );
   const [steps, setSteps] = useState<string[]>(
     initial?.steps.length ? initial.steps : [""],
@@ -138,10 +186,6 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     e.preventDefault();
 
     const finalCategory = (addingCategory ? newCategory : category).trim();
-    const cleanRows = (rows: Ingredient[]) =>
-      rows
-        .map((i) => ({ name: i.name.trim(), quantity: i.quantity.trim() }))
-        .filter((i) => i.name);
     const cleanIngredients = cleanRows(ingredients);
     const cleanSeasonings = cleanRows(seasonings);
     const cleanSteps = steps.map((s) => s.trim()).filter(Boolean);
@@ -149,6 +193,8 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     if (!name.trim()) return setError("料理名を入力してください。");
     if (!finalCategory) return setError("カテゴリーを選択または追加してください。");
     if (cleanIngredients.length === 0) return setError("材料を1つ以上入力してください。");
+    const groups = cleanExtraGroups(extraGroups);
+    if (!groups.ok) return setError(groups.error);
     if (cleanSteps.length === 0) return setError("手順を1つ以上入力してください。");
 
     try {
@@ -158,6 +204,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         tags,
         ingredients: cleanIngredients,
         seasonings: cleanSeasonings,
+        extraGroups: groups.groups,
         steps: cleanSteps,
       });
     } catch (err) {
@@ -249,10 +296,10 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => {
-              // 日本語入力の変換確定の Enter では追加しない
-              if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+              if (e.key !== "Enter") return;
               e.preventDefault();
-              addTag(tagInput);
+              // 日本語入力の変換確定の Enter では追加しない
+              if (isPlainEnter(e)) addTag(tagInput);
             }}
             disabled={tagsFull}
             placeholder={tagsFull ? "タグは最大3個までです" : "自由入力してEnterで追加"}
@@ -286,6 +333,58 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         namePlaceholder="例: しょうゆ"
         quantityPlaceholder="例: 大さじ1"
       />
+
+      {extraGroups.map((group, gi) => (
+        <IngredientRows
+          key={gi}
+          label={group.name.trim() || `グループ${gi + 1}`}
+          addLabel="行"
+          ariaPrefix={`グループ${gi + 1}の行`}
+          title={
+            <div className="mb-1 flex items-center gap-2">
+              <input
+                value={group.name}
+                onChange={(e) =>
+                  setExtraGroups(
+                    extraGroups.map((g, j) => (j === gi ? { ...g, name: e.target.value } : g)),
+                  )
+                }
+                placeholder="グループ名(例: トッピング)"
+                aria-label={`追加グループ${gi + 1}の名前`}
+                className={`min-w-0 flex-1 font-medium ${inputBase}`}
+              />
+              <button
+                type="button"
+                onClick={() => setExtraGroups(extraGroups.filter((_, j) => j !== gi))}
+                className="shrink-0 rounded-md px-2 py-2.5 text-sm text-stone-500 hover:text-red-600 sm:py-2"
+              >
+                グループを削除
+              </button>
+            </div>
+          }
+          rows={group.items}
+          onChange={(items) =>
+            setExtraGroups(extraGroups.map((g, j) => (j === gi ? { ...g, items } : g)))
+          }
+          namePlaceholder="例: 明太子"
+          quantityPlaceholder="例: 大さじ2"
+        />
+      ))}
+
+      <div>
+        <button
+          type="button"
+          onClick={() =>
+            setExtraGroups([...extraGroups, { name: "", items: [{ name: "", quantity: "" }] }])
+          }
+          className="w-full rounded-md border border-dashed border-stone-300 bg-white py-2.5 text-sm text-orange-700 hover:border-orange-400 sm:w-auto sm:px-4 sm:py-2"
+        >
+          ＋ グループを追加
+        </button>
+        <p className="mt-1.5 text-xs text-stone-500">
+          「トッピング」など、材料・調味料とは別の入力欄を増やせます(料理のカテゴリーとは別のものです)。
+        </p>
+      </div>
 
       <div>
         <p className="mb-1 text-sm font-medium">手順</p>
