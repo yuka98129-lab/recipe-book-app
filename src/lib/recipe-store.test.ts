@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_CATEGORIES } from "./constants";
-import type { RecipeInput } from "./types";
+import type { BackupFile } from "./backup";
+import type { Recipe, RecipeInput } from "./types";
 
 // ストアはモジュール内にキャッシュを持つので、テストごとに読み込み直す
 async function loadStore() {
@@ -282,6 +283,101 @@ describe("recipe-store: 購読", () => {
   });
 });
 
+describe("recipe-store: バックアップの取り込み", () => {
+  const backupOf = (recipes: Recipe[], customCategories: string[] = []): BackupFile => ({
+    app: "recipe-book",
+    version: 1,
+    exportedAt: "",
+    recipes,
+    customCategories,
+  });
+  const rec = (id: string, over: Partial<Recipe> = {}): Recipe => ({
+    id,
+    name: `レシピ${id}`,
+    category: "主菜",
+    tags: [],
+    ingredients: [{ name: "卵", quantity: "3個" }],
+    seasonings: [],
+    extraGroups: [],
+    steps: ["焼く"],
+    createdAt: 100,
+    ...over,
+  });
+
+  it("追加: いまのレシピを残してファイルのレシピを加え、保存にも反映される", async () => {
+    const store = await loadStore();
+    const mine = store.addRecipe(input({ name: "自分のレシピ" }));
+
+    const result = store.importBackup(backupOf([rec("x", { createdAt: 1 })]), "add");
+
+    expect(result).toEqual({ added: 1, skipped: 0 });
+    expect(store.getSnapshot().recipes.map((r) => r.id).sort()).toEqual([mine.id, "x"].sort());
+    expect(JSON.parse(localStorage.getItem("recipes:v1")!)).toHaveLength(2);
+  });
+
+  it("追加: 登録済みの同じ id は飛ばし、内容を書き換えない", async () => {
+    const store = await loadStore();
+    const mine = store.addRecipe(input({ name: "編集済み" }));
+
+    const result = store.importBackup(backupOf([rec(mine.id, { name: "古い内容" }), rec("y")]), "add");
+
+    expect(result).toEqual({ added: 1, skipped: 1 });
+    expect(store.getSnapshot().recipes.find((r) => r.id === mine.id)!.name).toBe("編集済み");
+  });
+
+  it("上書き: いまのレシピをすべてファイルの内容に置き換える", async () => {
+    const store = await loadStore();
+    store.addRecipe(input({ name: "消えるレシピ" }));
+
+    const result = store.importBackup(backupOf([rec("x"), rec("y")]), "replace");
+
+    expect(result).toEqual({ added: 2, skipped: 0 });
+    expect(store.getSnapshot().recipes.map((r) => r.id)).toEqual(["x", "y"]);
+  });
+
+  it("カテゴリー: ファイルのカテゴリーとレシピのカテゴリーを取り込む", async () => {
+    const store = await loadStore();
+    store.importBackup(backupOf([rec("x", { category: "作り置き" })], ["お弁当"]), "add");
+    expect(store.getSnapshot().categories).toEqual([...DEFAULT_CATEGORIES, "お弁当", "作り置き"]);
+  });
+
+  it("上書きでは、いまだけにあった追加カテゴリーは残らない", async () => {
+    const store = await loadStore();
+    store.addRecipe(input({ category: "古いカテゴリー" }));
+    store.importBackup(backupOf([rec("x")]), "replace");
+    expect(store.getSnapshot().categories).toEqual(DEFAULT_CATEGORIES);
+  });
+
+  it("取り込んだ内容はリロード相当(モジュール再読み込み)後も残る", async () => {
+    const first = await loadStore();
+    first.importBackup(backupOf([rec("x", { seasonings: [{ name: "塩", quantity: "少々" }] })], ["お弁当"]), "replace");
+
+    const second = await loadStore();
+    expect(second.getSnapshot().recipes[0].seasonings).toEqual([{ name: "塩", quantity: "少々" }]);
+    expect(second.getSnapshot().categories).toContain("お弁当");
+  });
+
+  it("書き出し→(全消去)→読み込みで、元のレシピに戻る", async () => {
+    const { createBackup, parseBackup, serializeBackup } = await import("./backup");
+    const first = await loadStore();
+    first.addRecipe(input({ name: "A", category: "お弁当", seasonings: [{ name: "塩", quantity: "少々" }] }));
+    first.addRecipe(input({ name: "B", extraGroups: [{ name: "トッピング", items: [{ name: "青ねぎ", quantity: "適量" }] }] }));
+    const before = first.getSnapshot();
+    const text = serializeBackup(createBackup(before.recipes, before.categories));
+
+    localStorage.clear();
+    const second = await loadStore();
+    expect(second.getSnapshot().recipes).toEqual([]);
+
+    const parsed = parseBackup(text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    second.importBackup(parsed.backup, "add");
+
+    expect(second.getSnapshot().recipes).toEqual(before.recipes);
+    expect(second.getSnapshot().categories).toEqual(before.categories);
+  });
+});
+
 describe("recipe-store: 保存失敗", () => {
   it("setItem が失敗したら StorageError を投げ、状態は変えず通知もしない", async () => {
     const store = await loadStore();
@@ -296,5 +392,45 @@ describe("recipe-store: 保存失敗", () => {
     expect(() => store.addRecipe(input())).toThrow(store.StorageError);
     expect(store.getSnapshot().recipes).toEqual([]);
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("2つ目の保存で失敗したら、1つ目の保存も元に戻す(レシピとカテゴリーが食い違わない)", async () => {
+    const store = await loadStore();
+    store.addRecipe(input({ name: "既存", category: "お弁当" }));
+    const recipesBefore = localStorage.getItem("recipes:v1");
+    const categoriesBefore = localStorage.getItem("categories:v1");
+
+    const realSetItem = Storage.prototype.setItem;
+    let calls = 0;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, k: string, v: string) {
+      calls += 1;
+      if (calls === 2) throw new DOMException("quota", "QuotaExceededError"); // カテゴリーの保存で失敗
+      realSetItem.call(this, k, v);
+    });
+
+    expect(() => store.addRecipe(input({ name: "新規", category: "新カテゴリー" }))).toThrow(store.StorageError);
+
+    vi.restoreAllMocks();
+    expect(localStorage.getItem("recipes:v1")).toBe(recipesBefore);
+    expect(localStorage.getItem("categories:v1")).toBe(categoriesBefore);
+    expect(store.getSnapshot().recipes.map((r) => r.name)).toEqual(["既存"]);
+  });
+
+  it("取り込みで保存に失敗しても、いまのデータは変わらない", async () => {
+    const store = await loadStore();
+    store.addRecipe(input({ name: "既存" }));
+    const before = localStorage.getItem("recipes:v1");
+
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    const backup = { app: "recipe-book" as const, version: 1, exportedAt: "", customCategories: [], recipes: [
+      { id: "x", name: "x", category: "主菜", tags: [], ingredients: [], seasonings: [], extraGroups: [], steps: [], createdAt: 1 },
+    ] };
+
+    expect(() => store.importBackup(backup, "replace")).toThrow(store.StorageError);
+    vi.restoreAllMocks();
+    expect(localStorage.getItem("recipes:v1")).toBe(before);
+    expect(store.getSnapshot().recipes.map((r) => r.name)).toEqual(["既存"]);
   });
 });

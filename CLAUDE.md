@@ -43,6 +43,14 @@ A personal recipe book app ("レシピ帳") for people who forget recipes they f
 - **User-added ingredient groups** (`Recipe.extraGroups: { name, items }[]`, e.g. トッピング) are separate from the fixed 材料 (required) and 調味料 (optional) fields, and are **not related to the recipe `category`** (主菜・副菜 etc.); keep the two concepts and their UI wording apart. Like `seasonings`, `extraGroups` may be missing in older stored recipes and is normalized to `[]` on load (malformed entries are dropped). Form validation for groups lives in `src/lib/ingredient-groups.ts` (`cleanExtraGroups`: blank groups are dropped, half-filled ones and duplicate/reserved names are errors).
 - **Enter adds a row** in ingredient inputs (`nextRowAfter`, no blank rows added). IME safety: use `isPlainEnter` (`src/lib/keyboard.ts`), which ignores `isComposing` **and** `keyCode === 229` (Safari fires the confirming Enter after `compositionend`). Enter in these inputs always `preventDefault`s so it never submits the form.
 
+## Backup (export / import)
+
+- Format: JSON `{ app: "recipe-book", version: 1, exportedAt, recipes, customCategories }` (`src/lib/backup.ts`). Bump `BACKUP_VERSION` only for a breaking change; files with a newer version are rejected.
+- `parseBackup` is strict and **all-or-nothing**: one bad recipe rejects the whole file (error names the recipe number and field), and only known fields are copied out. Older files without `seasonings`/`extraGroups` are accepted and normalized to `[]`.
+- Import modes (`importBackup` in `recipe-store.ts`): `add` keeps existing recipes and skips ids that already exist (re-importing the same file adds nothing; existing recipes are never overwritten); `replace` swaps everything and requires an inline confirmation in `BackupPanel`. A file with 0 recipes is refused so it cannot wipe the data.
+- `commit()` in the store restores the previous `localStorage` values if the second write fails, so recipes and categories never end up out of sync.
+- `BackupPanel` sits on the home page outside `RecipeBrowser` so it is shown even with 0 recipes (restoring into an empty app).
+
 ## Out of scope
 
 Photo upload (text-only), automatic recipe extraction from videos, meal planning / aggregated shopping lists (v2.0+).

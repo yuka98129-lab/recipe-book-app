@@ -1,3 +1,4 @@
+import { mergeCategoryNames, mergeRecipes, type BackupFile } from "./backup";
 import { DEFAULT_CATEGORIES } from "./constants";
 import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "./types";
 
@@ -73,12 +74,28 @@ function load(): StoreSnapshot {
 
 export class StorageError extends Error {}
 
+function restoreItem(key: string, value: string | null) {
+  if (value === null) localStorage.removeItem(key);
+  else localStorage.setItem(key, value);
+}
+
 function commit(next: StoreSnapshot) {
   const custom = next.categories.filter((c) => !DEFAULT_CATEGORIES.includes(c));
+  // 2つの保存の途中で失敗しても、レシピとカテゴリーが食い違わないよう元に戻せるようにしておく
+  const before = {
+    recipes: localStorage.getItem(RECIPES_KEY),
+    categories: localStorage.getItem(CATEGORIES_KEY),
+  };
   try {
     localStorage.setItem(RECIPES_KEY, JSON.stringify(next.recipes));
     localStorage.setItem(CATEGORIES_KEY, JSON.stringify(custom));
   } catch {
+    try {
+      restoreItem(RECIPES_KEY, before.recipes);
+      restoreItem(CATEGORIES_KEY, before.categories);
+    } catch {
+      // 元に戻せない場合でも、下のエラーで保存に失敗したことは伝わる
+    }
     throw new StorageError(
       "保存できませんでした。ブラウザの保存容量またはプライバシー設定を確認してください。",
     );
@@ -147,4 +164,39 @@ export function deleteRecipe(id: string) {
     recipes: current.recipes.filter((r) => r.id !== id),
     categories: current.categories,
   });
+}
+
+export type ImportMode = "add" | "replace";
+export type ImportResult = { added: number; skipped: number };
+
+/**
+ * 検証済みのバックアップを取り込む。保存に失敗したら StorageError を投げ、状態は変わらない。
+ * - add: いまのレシピは残し、ファイルのレシピを加える(同じ ID は登録済みとして飛ばす)
+ * - replace: いまのレシピをすべて、ファイルの内容に置き換える
+ */
+export function importBackup(backup: BackupFile, mode: ImportMode): ImportResult {
+  const current = getSnapshot();
+
+  if (mode === "replace") {
+    commit({
+      recipes: backup.recipes,
+      categories: mergeCategoryNames(
+        DEFAULT_CATEGORIES,
+        backup.customCategories,
+        backup.recipes.map((r) => r.category),
+      ),
+    });
+    return { added: backup.recipes.length, skipped: 0 };
+  }
+
+  const merged = mergeRecipes(current.recipes, backup.recipes);
+  commit({
+    recipes: merged.recipes,
+    categories: mergeCategoryNames(
+      current.categories,
+      backup.customCategories,
+      backup.recipes.map((r) => r.category),
+    ),
+  });
+  return { added: merged.added, skipped: merged.skipped };
 }
