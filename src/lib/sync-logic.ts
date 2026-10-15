@@ -1,3 +1,5 @@
+import { isCookingMinutes } from "./cooking-time";
+import { isPhotoPath } from "./photo-path";
 import type { Recipe } from "./types";
 
 /**
@@ -107,6 +109,8 @@ export function fromRow(row: RecipeRow): Recipe | null {
     seasonings: Array.isArray(d.seasonings) ? (d.seasonings as Recipe["seasonings"]) : [],
     extraGroups: Array.isArray(d.extraGroups) ? (d.extraGroups as Recipe["extraGroups"]) : [],
     steps: d.steps as string[],
+    ...(isPhotoPath(d.photoPath) ? { photoPath: d.photoPath } : {}),
+    ...(isCookingMinutes(d.cookingMinutes) ? { cookingMinutes: d.cookingMinutes } : {}),
     createdAt: typeof d.createdAt === "number" ? d.createdAt : 0,
   };
 }

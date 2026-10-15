@@ -4,8 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { RecipeForm } from "@/components/RecipeForm";
+import { RecipePhoto } from "@/components/RecipePhoto";
 import { TagChip } from "@/components/TagChip";
 import { useRecipes } from "@/hooks/use-recipes";
+import { formatMinutes } from "@/lib/cooking-time";
+import { removePhoto } from "@/lib/photo";
 import { deleteRecipe, updateRecipe } from "@/lib/recipe-store";
 import type { Ingredient } from "@/lib/types";
 
@@ -74,7 +77,10 @@ export default function RecipeDetailPage() {
       </Link>
 
       <header>
-        <p className="text-sm text-stone-500">{recipe.category}</p>
+        <p className="text-sm text-stone-500">
+          {recipe.category}
+          {recipe.cookingMinutes !== undefined && ` ・ 調理時間 ${formatMinutes(recipe.cookingMinutes)}`}
+        </p>
         <h1 className="mt-1 break-words text-xl font-bold sm:text-2xl">{recipe.name}</h1>
         {recipe.tags.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -84,6 +90,14 @@ export default function RecipeDetailPage() {
           </div>
         )}
       </header>
+
+      {recipe.photoPath && (
+        <RecipePhoto
+          path={recipe.photoPath}
+          alt={`${recipe.name}の写真`}
+          className="h-56 w-full rounded-lg sm:h-72"
+        />
+      )}
 
       <IngredientSection title="材料" items={recipe.ingredients} />
       {/* 調味料が未入力のレシピでは、空の見出しを出さない */}
@@ -127,6 +141,8 @@ export default function RecipeDetailPage() {
             <button
               type="button"
               onClick={() => {
+                // 写真も、クラウドから消す(失敗してもレシピの削除は進める)
+                if (recipe.photoPath) void removePhoto(recipe.photoPath);
                 deleteRecipe(recipe.id);
                 router.push("/");
               }}

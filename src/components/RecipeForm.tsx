@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRecipes } from "@/hooks/use-recipes";
+import { useSync } from "@/hooks/use-sync";
 import { MAX_TAGS, SUGGESTED_TAGS } from "@/lib/constants";
+import { MAX_COOKING_MINUTES, parseCookingMinutes } from "@/lib/cooking-time";
 import { cleanExtraGroups, cleanRows, nextRowAfter } from "@/lib/ingredient-groups";
 import { isPlainEnter } from "@/lib/keyboard";
+import { PhotoError, removePhoto, resizeImage, uploadPhoto } from "@/lib/photo";
 import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "@/lib/types";
+import { RecipePhoto } from "./RecipePhoto";
 import { TagChip } from "./TagChip";
 
 const NEW_CATEGORY = "__new__";
@@ -14,7 +18,7 @@ type Props = {
   initial?: Recipe;
   submitLabel: string;
   /** 保存に失敗した場合は例外を投げる(メッセージをフォームに表示する) */
-  onSubmit: (input: RecipeInput) => void;
+  onSubmit: (input: RecipeInput) => void | Promise<void>;
   onCancel: () => void;
 };
 
@@ -56,6 +60,7 @@ function IngredientRows({
   quantityPlaceholder,
 }: IngredientRowsProps) {
   const nameInputs = useRef<(HTMLInputElement | null)[]>([]);
+  const quantityInputs = useRef<(HTMLInputElement | null)[]>([]);
   // Enter で行を足した直後は、描画が終わってから新しい行の名前欄へカーソルを移す
   const pendingFocus = useRef<number | null>(null);
   useEffect(() => {
@@ -67,13 +72,20 @@ function IngredientRows({
   const update = (i: number, patch: Partial<Ingredient>) =>
     onChange(rows.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
-  function handleKeyDown(e: React.KeyboardEvent, i: number) {
+  function handleKeyDown(e: React.KeyboardEvent, i: number, field: "name" | "quantity") {
     if (e.key !== "Enter") return;
     // Enter でフォーム全体が送信されないようにする(変換確定の Enter も同様)
     e.preventDefault();
     // 日本語入力の変換を確定する Enter は、行の追加として扱わない
     if (!isPlainEnter(e)) return;
 
+    // 名前欄の Enter は、同じ行の分量欄へ移る
+    if (field === "name") {
+      quantityInputs.current[i]?.focus();
+      return;
+    }
+
+    // 分量欄の Enter は、次の行の名前欄へ移る(次の行がなければ追加する)
     const next = nextRowAfter(rows, i);
     if (!next) return; // 空欄の行では増やさない
     if (next.rows === rows) {
@@ -101,15 +113,18 @@ function IngredientRows({
               }}
               value={row.name}
               onChange={(e) => update(i, { name: e.target.value })}
-              onKeyDown={(e) => handleKeyDown(e, i)}
+              onKeyDown={(e) => handleKeyDown(e, i, "name")}
               placeholder={namePlaceholder}
               aria-label={`${ariaPrefix}${i + 1}の名前`}
               className={`min-w-0 flex-1 ${inputBase}`}
             />
             <input
+              ref={(el) => {
+                quantityInputs.current[i] = el;
+              }}
               value={row.quantity}
               onChange={(e) => update(i, { quantity: e.target.value })}
-              onKeyDown={(e) => handleKeyDown(e, i)}
+              onKeyDown={(e) => handleKeyDown(e, i, "quantity")}
               placeholder={quantityPlaceholder}
               aria-label={`${ariaPrefix}${i + 1}の分量`}
               className={`w-32 shrink-0 ${inputBase} sm:w-40`}
@@ -159,7 +174,48 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
   const [steps, setSteps] = useState<string[]>(
     initial?.steps.length ? initial.steps : [""],
   );
+  // 調理時間(分)。入力中は文字のまま持つ(空欄 = 未入力)
+  const [cookingMinutes, setCookingMinutes] = useState(
+    initial?.cookingMinutes !== undefined ? String(initial.cookingMinutes) : "",
+  );
   const [error, setError] = useState("");
+
+  // 写真(1枚)。保存するまでは、選んだ写真を端末の中に持っておき、保存のときにクラウドへ送る
+  const sync = useSync();
+  const signedIn =
+    sync.status === "idle" || sync.status === "syncing" || sync.status === "error";
+  const [photoPath, setPhotoPath] = useState<string | undefined>(initial?.photoPath);
+  const [newPhoto, setNewPhoto] = useState<{ blob: Blob; url: string } | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // 選んだ写真のプレビュー用URLは、使い終わったら解放する
+  useEffect(() => {
+    return () => {
+      if (newPhoto) URL.revokeObjectURL(newPhoto.url);
+    };
+  }, [newPhoto]);
+
+  async function handlePickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 同じ写真をもう一度選んでも反応するようにする
+    if (!file) return;
+    setError("");
+    setPhotoBusy(true);
+    try {
+      const blob = await resizeImage(file);
+      setNewPhoto({ blob, url: URL.createObjectURL(blob) });
+    } catch (err) {
+      setError(err instanceof PhotoError ? err.message : "写真を読み込めませんでした。");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  function clearPhoto() {
+    setNewPhoto(null);
+    setPhotoPath(undefined);
+  }
 
   // 登録済みレシピで使われているタグも候補に出す
   const tagSuggestions = useMemo(() => {
@@ -182,8 +238,9 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     else addTag(tag);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (saving || photoBusy) return;
 
     const finalCategory = (addingCategory ? newCategory : category).trim();
     const cleanIngredients = cleanRows(ingredients);
@@ -192,13 +249,27 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
 
     if (!name.trim()) return setError("料理名を入力してください。");
     if (!finalCategory) return setError("カテゴリーを選択または追加してください。");
+    const minutes = parseCookingMinutes(cookingMinutes);
+    if (minutes === null) {
+      return setError(`調理時間は、1〜${MAX_COOKING_MINUTES}の整数(分)で入力してください。`);
+    }
     if (cleanIngredients.length === 0) return setError("材料を1つ以上入力してください。");
     const groups = cleanExtraGroups(extraGroups);
     if (!groups.ok) return setError(groups.error);
     if (cleanSteps.length === 0) return setError("手順を1つ以上入力してください。");
 
+    setSaving(true);
+    setError("");
+    // 今回アップロードした写真。保存に失敗したら、取り残さないよう消す
+    let uploaded: string | undefined;
     try {
-      onSubmit({
+      let finalPhoto = photoPath;
+      if (newPhoto) {
+        uploaded = await uploadPhoto(newPhoto.blob);
+        finalPhoto = uploaded;
+      }
+      // 写真を外した場合も確実に消えるよう、photoPath は(未設定でも)必ず渡す
+      await onSubmit({
         name: name.trim(),
         category: finalCategory,
         tags,
@@ -206,9 +277,18 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         seasonings: cleanSeasonings,
         extraGroups: groups.groups,
         steps: cleanSteps,
+        photoPath: finalPhoto,
+        // 空欄のときも、キーは渡す(消した調理時間が残らないように)
+        cookingMinutes: minutes,
       });
+      // 保存できてから、差し替え・削除された古い写真を消す
+      const old = initial?.photoPath;
+      if (old && old !== finalPhoto) void removePhoto(old);
     } catch (err) {
+      if (uploaded) void removePhoto(uploaded);
       setError(err instanceof Error ? err.message : "保存に失敗しました。");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -224,6 +304,83 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
           onChange={(e) => setName(e.target.value)}
           className={inputClass}
         />
+      </div>
+
+      <div>
+        <p className="mb-1 text-sm font-medium">
+          写真
+          <span className="ml-2 text-xs font-normal text-stone-500">任意・1枚</span>
+        </p>
+        {signedIn ? (
+          <div className="rounded-lg border border-dashed border-stone-300 bg-white p-3">
+            {newPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={newPhoto.url}
+                alt="選んだ写真"
+                className="h-44 w-full rounded-md object-cover"
+              />
+            ) : photoPath ? (
+              <RecipePhoto path={photoPath} alt="いまの写真" className="h-44 w-full rounded-md" />
+            ) : null}
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label
+                className={`inline-block cursor-pointer rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm hover:bg-stone-50 sm:py-2 ${
+                  photoBusy || saving ? "pointer-events-none opacity-40" : ""
+                }`}
+              >
+                {photoBusy ? "写真を準備しています…" : newPhoto || photoPath ? "写真を選び直す" : "写真を選ぶ・撮る"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePickPhoto}
+                  disabled={photoBusy || saving}
+                  className="sr-only"
+                />
+              </label>
+              {(newPhoto || photoPath) && (
+                <button
+                  type="button"
+                  onClick={clearPhoto}
+                  disabled={saving}
+                  className="py-2 text-sm text-red-700 underline disabled:opacity-40 sm:py-0"
+                >
+                  写真を外す
+                </button>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-stone-500">
+              スマホでは、その場で撮るか、写真から選べます。大きい写真は、自動で小さくして保存します。
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+            写真は、ログインしているときに使えます。トップ画面の下の「ほかの端末と同期する」で、ログインしてください。
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="cooking-minutes" className="mb-1 block text-sm font-medium">
+          調理時間
+          <span className="ml-2 text-xs font-normal text-stone-500">任意</span>
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            id="cooking-minutes"
+            type="text"
+            inputMode="numeric"
+            value={cookingMinutes}
+            onChange={(e) => setCookingMinutes(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter でフォームが送信されないようにする
+              if (e.key === "Enter") e.preventDefault();
+            }}
+            placeholder="例: 15"
+            className={`w-28 ${inputBase}`}
+          />
+          <span className="text-sm text-stone-600">分</span>
+        </div>
       </div>
 
       <div>
@@ -431,9 +588,10 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
       <div className="flex gap-3">
         <button
           type="submit"
-          className="flex-1 rounded-md bg-orange-600 px-5 py-2.5 font-medium text-white hover:bg-orange-700 sm:flex-none sm:py-2"
+          disabled={saving || photoBusy}
+          className="flex-1 rounded-md bg-orange-600 px-5 py-2.5 font-medium text-white hover:bg-orange-700 disabled:opacity-50 sm:flex-none sm:py-2"
         >
-          {submitLabel}
+          {saving ? "保存しています…" : submitLabel}
         </button>
         <button
           type="button"

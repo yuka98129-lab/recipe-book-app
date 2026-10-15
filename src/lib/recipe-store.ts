@@ -1,5 +1,7 @@
 import { mergeCategoryNames, mergeRecipes, type BackupFile } from "./backup";
 import { DEFAULT_CATEGORIES } from "./constants";
+import { isCookingMinutes } from "./cooking-time";
+import { isPhotoPath } from "./photo-path";
 import { diffToOps, type PendingOp } from "./sync-logic";
 import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "./types";
 
@@ -20,9 +22,11 @@ let cache: StoreSnapshot | null = null;
 const listeners = new Set<() => void>();
 
 /** 保存済みデータの形。seasonings と extraGroups は後から追加したため、古いレシピには無い */
-type StoredRecipe = Omit<Recipe, "seasonings" | "extraGroups"> & {
+type StoredRecipe = Omit<Recipe, "seasonings" | "extraGroups" | "photoPath" | "cookingMinutes"> & {
   seasonings?: Ingredient[];
   extraGroups?: unknown;
+  photoPath?: unknown;
+  cookingMinutes?: unknown;
 };
 
 function isRecipe(v: unknown): v is StoredRecipe {
@@ -60,11 +64,17 @@ function isGroup(v: unknown): v is IngredientGroup {
 }
 
 // 古いレシピ(調味料・追加グループの項目自体がない)も新しい形で扱えるようにする
-const normalize = (r: StoredRecipe): Recipe => ({
-  ...r,
-  seasonings: Array.isArray(r.seasonings) ? r.seasonings : [],
-  extraGroups: Array.isArray(r.extraGroups) ? r.extraGroups.filter(isGroup) : [],
-});
+// 写真のパスは、正しい形のときだけ残す(壊れた値は「写真なし」として扱う)
+const normalize = (r: StoredRecipe): Recipe => {
+  const { photoPath, cookingMinutes, ...rest } = r;
+  return {
+    ...rest,
+    seasonings: Array.isArray(r.seasonings) ? r.seasonings : [],
+    extraGroups: Array.isArray(r.extraGroups) ? r.extraGroups.filter(isGroup) : [],
+    ...(isPhotoPath(photoPath) ? { photoPath } : {}),
+    ...(isCookingMinutes(cookingMinutes) ? { cookingMinutes } : {}),
+  };
+};
 
 function load(): StoreSnapshot {
   const recipes = readArray(RECIPES_KEY).filter(isRecipe).map(normalize);

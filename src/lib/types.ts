@@ -17,6 +17,10 @@ export type Recipe = {
   /** ユーザーが追加したグループ。後から追加した項目のため、古いレシピには無い(読み込み時に [] で補う) */
   extraGroups: IngredientGroup[];
   steps: string[];
+  /** 料理の写真(Supabase Storage 内のパス)。1レシピに1枚。ログイン中だけ使える。無いレシピが多い */
+  photoPath?: string;
+  /** 調理時間(分、1〜1440の整数)。任意。後から追加した項目のため、無いレシピが多い */
+  cookingMinutes?: number;
   createdAt: number;
 };
 

@@ -64,3 +64,13 @@ A personal recipe book app ("レシピ帳") for people who forget recipes they f
 ## Out of scope
 
 Photo upload (text-only), automatic recipe extraction from videos, meal planning / aggregated shopping lists (v2.0+).
+
+## Photo (optional, needs sync) and cooking time
+
+- `Recipe.photoPath?: string` points to one JPEG in the private Supabase Storage bucket `recipe-photos` (`supabase/photos.sql`: private, JPEG only, 3MB, RLS so only `<own uid>/…` objects are accessible). Path format `<uid>/<random uuid>.jpg` (`src/lib/photo-path.ts`: `makePhotoPath`, `isPhotoPath`). **Invalid paths are treated as "no photo"** in `normalize` (store), `fromRow` (sync) and `parseBackup`.
+- `src/lib/photo.ts`: `resizeImage` (canvas → JPEG, long side ≤1280, white background), `uploadPhoto`, `removePhoto` (best effort), `getPhotoUrl` (1-hour signed URLs, reused for 50 min, failures are not cached). `usePhotoUrl` + `RecipePhoto` show the image or a gray placeholder; a failed `<img>` falls back to the placeholder.
+- Photos need a signed-in session: without it the form shows a login note instead of the file input. The recipe itself still works fully offline/local-first. Photo bytes are never in localStorage or the backup JSON (only the path is).
+- `RecipeForm` keeps the picked photo as a Blob until save, then uploads, then calls `onSubmit` (which may now return a Promise). If saving fails after upload, the new photo is removed; after a successful save, a replaced/removed old photo is removed. `onSubmit` always receives the `photoPath` and `cookingMinutes` keys (possibly `undefined`) so `updateRecipe`'s spread can clear them. Deleting a recipe also removes its photo (best effort, in the detail page).
+- `Recipe.cookingMinutes?: number` (integer 1–1440, `src/lib/cooking-time.ts`: `parseCookingMinutes` accepts full-width digits, `formatMinutes`). Same normalize/fromRow/parseBackup handling as `photoPath`.
+- Ingredient inputs: Enter in a **name** field focuses the same row's **quantity** field; Enter in a **quantity** field uses `nextRowAfter` (next row's name, adding a row if needed). Both ignore IME-composition Enter.
+- Ideas not built yet: nutrition estimates from a photo and vegetable-intake vs. reference values. If added, treat results as rough estimates, make the user able to correct them, and keep it out of the offline core.
