@@ -1,8 +1,10 @@
 import { mergeCategoryNames, mergeRecipes, type BackupFile } from "./backup";
 import { DEFAULT_CATEGORIES } from "./constants";
+import { diffToOps, type PendingOp } from "./sync-logic";
 import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "./types";
 
 // localStorage への唯一の窓口。UI は保存形式を知らない。
+// 同期(sync.ts)は、変更の通知(setChangeHandler)と、サーバーの内容の反映(replaceFromRemote)だけでつながる。
 const RECIPES_KEY = "recipes:v1";
 const CATEGORIES_KEY = "categories:v1";
 
@@ -130,6 +132,35 @@ export function getServerSnapshot(): StoreSnapshot {
   return EMPTY;
 }
 
+// --- 同期との接点 ---
+
+type ChangeHandler = (ops: PendingOp[]) => void;
+let changeHandler: ChangeHandler | null = null;
+
+/** この端末でレシピが変わったときに呼ばれる関数を登録する(同期がオンのとき、サーバーへ送る変更の記録に使う) */
+export function setChangeHandler(handler: ChangeHandler | null) {
+  changeHandler = handler;
+}
+
+const notifyChange = (ops: PendingOp[]) => {
+  if (ops.length > 0) changeHandler?.(ops);
+};
+
+/**
+ * サーバーから受け取った内容で、この端末のレシピを置き換える(変更の通知は出さない)。
+ * 保存に失敗したら StorageError を投げ、状態は変わらない。
+ */
+export function replaceFromRemote(recipes: Recipe[]) {
+  const current = getSnapshot();
+  commit({
+    recipes,
+    categories: mergeCategoryNames(
+      current.categories,
+      recipes.map((r) => r.category),
+    ),
+  });
+}
+
 // --- 操作 ---
 
 function withCategory(categories: string[], category: string) {
@@ -147,6 +178,7 @@ export function addRecipe(input: RecipeInput): Recipe {
     recipes: [recipe, ...current.recipes],
     categories: withCategory(current.categories, input.category),
   });
+  notifyChange([{ type: "upsert", id: recipe.id }]);
   return recipe;
 }
 
@@ -156,6 +188,7 @@ export function updateRecipe(id: string, input: RecipeInput) {
     recipes: current.recipes.map((r) => (r.id === id ? { ...r, ...input } : r)),
     categories: withCategory(current.categories, input.category),
   });
+  notifyChange([{ type: "upsert", id }]);
 }
 
 export function deleteRecipe(id: string) {
@@ -164,6 +197,7 @@ export function deleteRecipe(id: string) {
     recipes: current.recipes.filter((r) => r.id !== id),
     categories: current.categories,
   });
+  notifyChange([{ type: "delete", id }]);
 }
 
 export type ImportMode = "add" | "replace";
@@ -186,6 +220,7 @@ export function importBackup(backup: BackupFile, mode: ImportMode): ImportResult
         backup.recipes.map((r) => r.category),
       ),
     });
+    notifyChange(diffToOps(current.recipes, backup.recipes));
     return { added: backup.recipes.length, skipped: 0 };
   }
 
@@ -198,5 +233,6 @@ export function importBackup(backup: BackupFile, mode: ImportMode): ImportResult
       backup.recipes.map((r) => r.category),
     ),
   });
+  notifyChange(diffToOps(current.recipes, merged.recipes));
   return { added: merged.added, skipped: merged.skipped };
 }

@@ -24,7 +24,7 @@ A personal recipe book app ("レシピ帳") for people who forget recipes they f
 
 ## Fixed constraints
 
-- **No backend:** no server, external DB, or external services. Persistence is browser `localStorage` only, and no data may be sent externally.
+- **Local-first, sync is optional:** the app must keep working with browser `localStorage` alone. Cloud sync (Supabase, login required) is an opt-in layer enabled only when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set; without them nothing is sent externally. Never put a secret / service_role key in the client. Only the signed-in user's own rows may be readable (RLS in `supabase/schema.sql`).
 - **Do not enable `output: 'export'`:** recipe IDs are only known at runtime, so `/recipes/[id]` is a dynamic route rendered on demand, not statically generated.
 - **Devices:** desktop-first, but layouts should remain usable on mobile via Tailwind responsive utilities.
 - **Language:** UI and product docs are Japanese (`<html lang="ja">`, system Japanese font stack, no Google fonts).
@@ -42,6 +42,16 @@ A personal recipe book app ("レシピ帳") for people who forget recipes they f
 - **`seasonings` was added after recipes were already being saved**, so stored recipes may lack it. `recipe-store.ts` fills in `[]` when loading (`normalize`), so the rest of the app can treat `Recipe.seasonings` as always present. The storage key stays `recipes:v1` because the change is additive; only bump it for a breaking change. The detail page hides the 調味料 section when it is empty.
 - **User-added ingredient groups** (`Recipe.extraGroups: { name, items }[]`, e.g. トッピング) are separate from the fixed 材料 (required) and 調味料 (optional) fields, and are **not related to the recipe `category`** (主菜・副菜 etc.); keep the two concepts and their UI wording apart. Like `seasonings`, `extraGroups` may be missing in older stored recipes and is normalized to `[]` on load (malformed entries are dropped). Form validation for groups lives in `src/lib/ingredient-groups.ts` (`cleanExtraGroups`: blank groups are dropped, half-filled ones and duplicate/reserved names are errors).
 - **Enter adds a row** in ingredient inputs (`nextRowAfter`, no blank rows added). IME safety: use `isPlainEnter` (`src/lib/keyboard.ts`), which ignores `isComposing` **and** `keyCode === 229` (Safari fires the confirming Enter after `compositionend`). Enter in these inputs always `preventDefault`s so it never submits the form.
+
+## Sync (optional, Supabase)
+
+- Files: `src/lib/supabase.ts` (client, null when not configured), `src/lib/sync-logic.ts` (pure: pending-op queue, `mergeRemote`, `migrationOps`, row mapping), `src/lib/sync.ts` (state machine + network), `SyncBootstrap` (starts it once from the layout), `SyncPanel` (login / status UI on the home page), `supabase/schema.sql`, `docs/同期の設定手順.md`.
+- The UI still reads/writes only `recipe-store.ts`. The store reports changes through `setChangeHandler` (add/update/delete/import) and accepts the server's content through `replaceFromRemote` (which does not report a change).
+- Changes are queued in the outbox (`localStorage` key `sync:outbox:v1`, one entry per recipe id, last op wins) and flushed after ~1s, on login, on tab focus (throttled), and on `online`. Failed sends stay in the outbox and are retried; local data is never dropped.
+- Each sync: flush outbox → pull all rows → (first login on this device only, tracked in `sync:migrated:v1`) upload local recipes the server lacks → `mergeRemote` (server is the source of truth, but pending local upserts/deletes win) → `replaceFromRemote`.
+- Login is email + password (`signInWithPassword`); there is intentionally no sign-up UI (the single user is created in the Supabase dashboard and public sign-ups are disabled).
+- Custom categories are not a separate table: they are derived from the `category` of synced recipes.
+- Tests: `sync-logic.test.ts` (pure) and `sync.test.ts` (flow against a fake Supabase client). The real Supabase service has not been exercised by automated tests.
 
 ## Backup (export / import)
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SyncBootstrap } from "@/components/SyncBootstrap";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,6 +12,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
+        <SyncBootstrap />
         <header className="border-b border-stone-200 bg-white">
           <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
             <Link href="/" className="py-2 text-lg font-bold text-stone-900 sm:py-0">

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRecipes } from "@/hooks/use-recipes";
+import { useSync } from "@/hooks/use-sync";
 import {
   MAX_BACKUP_BYTES,
   backupFileName,
@@ -29,6 +30,7 @@ function formatExportedAt(iso: string): string {
 /** レシピのバックアップ(書き出し)と復元(読み込み)。データはこのブラウザの外には送らない */
 export function BackupPanel() {
   const { recipes, categories, ready } = useRecipes();
+  const sync = useSync();
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [confirmReplace, setConfirmReplace] = useState(false);
@@ -123,7 +125,10 @@ export function BackupPanel() {
         バックアップ
       </h2>
       <p className="mt-1 text-sm text-stone-600">
-        レシピはこのブラウザにだけ保存されています。ファイルに書き出しておくと、ブラウザのデータを消してしまったときや、別の端末・ブラウザへ移すときに復元できます。
+        ファイルに書き出しておくと、ブラウザのデータを消してしまったときや、アカウントを作り直すときなどに復元できます。
+        {sync.status === "disabled"
+          ? "いまは、レシピはこのブラウザにだけ保存されています。"
+          : "同期にログインしていれば、クラウドにも保存されていますが、念のため時々書き出しておくと安心です。"}
       </p>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
