@@ -7,9 +7,12 @@ import { MAX_TAGS, SUGGESTED_TAGS } from "@/lib/constants";
 import { MAX_COOKING_MINUTES, parseCookingMinutes } from "@/lib/cooking-time";
 import { cleanExtraGroups, cleanRows, nextRowAfter } from "@/lib/ingredient-groups";
 import { isPlainEnter } from "@/lib/keyboard";
+import { MAX_SERVINGS, parseServings } from "@/lib/servings";
 import { PhotoError, removePhoto, resizeImage, uploadPhoto } from "@/lib/photo";
+import { extractionToFormValues, type ExtractedRecipe } from "@/lib/recipe-extract";
 import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "@/lib/types";
 import { RecipePhoto } from "./RecipePhoto";
+import { RecipeReader } from "./RecipeReader";
 import { TagChip } from "./TagChip";
 
 const NEW_CATEGORY = "__new__";
@@ -23,7 +26,7 @@ type Props = {
 };
 
 const inputBase =
-  "rounded-md border border-stone-300 bg-white px-3 py-2 outline-none focus:border-orange-500";
+  "rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-3 py-2 outline-none focus:border-orange-500";
 const inputClass = `w-full ${inputBase}`;
 
 // スマホで押しやすいよう、行の削除(✕)と追加リンクのタップ領域を広げる(パソコン幅は従来どおり)
@@ -178,6 +181,10 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
   const [cookingMinutes, setCookingMinutes] = useState(
     initial?.cookingMinutes !== undefined ? String(initial.cookingMinutes) : "",
   );
+  // 何人分の材料か。入力中は文字のまま持つ(空欄 = 未入力)
+  const [servings, setServings] = useState(
+    initial?.servings !== undefined ? String(initial.servings) : "",
+  );
   const [error, setError] = useState("");
 
   // 写真(1枚)。保存するまでは、選んだ写真を端末の中に持っておき、保存のときにクラウドへ送る
@@ -238,6 +245,32 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     else addTag(tag);
   }
 
+  // 読み取り結果(確認前の下書き)を入力欄に入れる。写真・カテゴリー(候補外)は、いまのままにする
+  function applyExtraction(ex: ExtractedRecipe) {
+    const v = extractionToFormValues(ex, categories);
+    setName(v.name);
+    if (v.category !== null) {
+      setCategory(v.category);
+      setNewCategory("");
+    }
+    setTags(v.tags);
+    setCookingMinutes(v.cookingMinutes);
+    setServings(v.servings);
+    setIngredients(v.ingredients);
+    setSeasonings(v.seasonings);
+    setExtraGroups([]);
+    setSteps(v.steps);
+    setError("");
+  }
+
+  // 何か入力済みなら、読み取りで置き換わる前に確認する
+  const hasContent =
+    name.trim() !== "" ||
+    cleanRows(ingredients).length > 0 ||
+    cleanRows(seasonings).length > 0 ||
+    steps.some((s) => s.trim() !== "") ||
+    extraGroups.length > 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving || photoBusy) return;
@@ -252,6 +285,10 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     const minutes = parseCookingMinutes(cookingMinutes);
     if (minutes === null) {
       return setError(`調理時間は、1〜${MAX_COOKING_MINUTES}の整数(分)で入力してください。`);
+    }
+    const servingsNum = parseServings(servings);
+    if (servingsNum === null) {
+      return setError(`人数は、1〜${MAX_SERVINGS}の整数(人分)で入力してください。`);
     }
     if (cleanIngredients.length === 0) return setError("材料を1つ以上入力してください。");
     const groups = cleanExtraGroups(extraGroups);
@@ -280,6 +317,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         photoPath: finalPhoto,
         // 空欄のときも、キーは渡す(消した調理時間が残らないように)
         cookingMinutes: minutes,
+        servings: servingsNum,
       });
       // 保存できてから、差し替え・削除された古い写真を消す
       const old = initial?.photoPath;
@@ -294,6 +332,8 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <RecipeReader categories={categories} hasContent={hasContent} onApply={applyExtraction} />
+
       <div>
         <label htmlFor="name" className="mb-1 block text-sm font-medium">
           料理名
@@ -312,20 +352,20 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
           <span className="ml-2 text-xs font-normal text-stone-500">任意・1枚</span>
         </p>
         {signedIn ? (
-          <div className="rounded-lg border border-dashed border-stone-300 bg-white p-3">
+          <div className="rounded-2xl border-2 border-dashed border-orange-200 bg-white p-3">
             {newPhoto ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={newPhoto.url}
                 alt="選んだ写真"
-                className="h-44 w-full rounded-md object-cover"
+                className="h-44 w-full rounded-xl object-cover"
               />
             ) : photoPath ? (
-              <RecipePhoto path={photoPath} alt="いまの写真" className="h-44 w-full rounded-md" />
+              <RecipePhoto path={photoPath} alt="いまの写真" className="h-44 w-full rounded-xl" />
             ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label
-                className={`inline-block cursor-pointer rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm hover:bg-stone-50 sm:py-2 ${
+                className={`inline-block cursor-pointer rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-4 py-2.5 text-sm hover:bg-orange-50 sm:py-2 ${
                   photoBusy || saving ? "pointer-events-none opacity-40" : ""
                 }`}
               >
@@ -354,8 +394,8 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
-            写真は、ログインしているときに使えます。トップ画面の下の「ほかの端末と同期する」で、ログインしてください。
+          <div className="rounded-2xl border-2 border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+            写真は、ログインしているときに使えます。「設定」の「ほかの端末と同期する」で、ログインしてください。
           </div>
         )}
       </div>
@@ -442,7 +482,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
                 type="button"
                 onClick={() => toggleTag(t)}
                 disabled={tagsFull}
-                className="rounded-full border border-stone-300 bg-white px-2.5 py-2 text-sm text-stone-700 hover:border-orange-400 disabled:opacity-40 sm:py-0.5"
+                className="rounded-full border-2 border-line bg-white px-2.5 py-2 text-sm text-stone-700 hover:border-orange-400 disabled:opacity-40 sm:py-0.5"
               >
                 ＋ {t}
               </button>
@@ -467,10 +507,33 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
             type="button"
             onClick={() => addTag(tagInput)}
             disabled={tagsFull || !tagInput.trim()}
-            className="shrink-0 rounded-md border border-stone-300 bg-white px-3 text-sm hover:bg-stone-50 disabled:opacity-40"
+            className="shrink-0 rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-3 text-sm hover:bg-orange-50 disabled:opacity-40"
           >
             追加
           </button>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="servings" className="mb-1 block text-sm font-medium">
+          何人分の材料ですか
+          <span className="ml-2 text-xs font-normal text-stone-500">任意</span>
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            id="servings"
+            type="text"
+            inputMode="numeric"
+            value={servings}
+            onChange={(e) => setServings(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter でフォームが送信されないようにする
+              if (e.key === "Enter") e.preventDefault();
+            }}
+            placeholder="例: 2"
+            className={`w-28 ${inputBase}`}
+          />
+          <span className="text-sm text-stone-600">人分</span>
         </div>
       </div>
 
@@ -513,7 +576,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
               <button
                 type="button"
                 onClick={() => setExtraGroups(extraGroups.filter((_, j) => j !== gi))}
-                className="shrink-0 rounded-md px-2 py-2.5 text-sm text-stone-500 hover:text-red-600 sm:py-2"
+                className="shrink-0 rounded-xl px-2 py-2.5 text-sm text-stone-500 hover:text-red-600 sm:py-2"
               >
                 グループを削除
               </button>
@@ -534,7 +597,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
           onClick={() =>
             setExtraGroups([...extraGroups, { name: "", items: [{ name: "", quantity: "" }] }])
           }
-          className="w-full rounded-md border border-dashed border-stone-300 bg-white py-2.5 text-sm text-orange-700 hover:border-orange-400 sm:w-auto sm:px-4 sm:py-2"
+          className="w-full rounded-xl border-2 border-dashed border-orange-200 bg-white py-2.5 text-sm text-orange-700 hover:border-orange-400 sm:w-auto sm:px-4 sm:py-2"
         >
           ＋ グループを追加
         </button>
@@ -580,7 +643,7 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
       </div>
 
       {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
       )}
@@ -589,14 +652,14 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
         <button
           type="submit"
           disabled={saving || photoBusy}
-          className="flex-1 rounded-md bg-orange-600 px-5 py-2.5 font-medium text-white hover:bg-orange-700 disabled:opacity-50 sm:flex-none sm:py-2"
+          className="flex-1 btn-pop rounded-xl bg-orange-600 px-5 py-2.5 font-bold text-white hover:bg-orange-700 disabled:opacity-50 sm:flex-none sm:py-2"
         >
           {saving ? "保存しています…" : submitLabel}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-md border border-stone-300 bg-white px-5 py-2.5 hover:bg-stone-50 sm:flex-none sm:py-2"
+          className="flex-1 rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-5 py-2.5 hover:bg-orange-50 sm:flex-none sm:py-2"
         >
           キャンセル
         </button>

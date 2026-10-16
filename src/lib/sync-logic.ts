@@ -1,5 +1,7 @@
 import { isCookingMinutes } from "./cooking-time";
 import { isPhotoPath } from "./photo-path";
+import { parseStoredNutrition } from "./nutrition";
+import { isServings } from "./servings";
 import type { Recipe } from "./types";
 
 /**
@@ -111,6 +113,8 @@ export function fromRow(row: RecipeRow): Recipe | null {
     steps: d.steps as string[],
     ...(isPhotoPath(d.photoPath) ? { photoPath: d.photoPath } : {}),
     ...(isCookingMinutes(d.cookingMinutes) ? { cookingMinutes: d.cookingMinutes } : {}),
+    ...(isServings(d.servings) ? { servings: d.servings } : {}),
+    ...(parseStoredNutrition(d.nutrition) ? { nutrition: parseStoredNutrition(d.nutrition) } : {}),
     createdAt: typeof d.createdAt === "number" ? d.createdAt : 0,
   };
 }

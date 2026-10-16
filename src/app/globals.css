@@ -1,13 +1,74 @@
 @import "tailwindcss";
 
+/* あざやか・ポップなデザイン。色は、ここだけで決める。
+   orange を、トマト色(コーラル)の段階に置き換えているので、既存の orange-◯◯ の指定が、そのまま新しい色になる。
+   文字を載せる色(600〜900)は、読みやすさのため、見本より少し濃くしてある。 */
 @theme inline {
   --font-sans:
-    system-ui, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
-    Meiryo, sans-serif;
+    "Hiragino Maru Gothic ProN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    "Yu Gothic", Meiryo, system-ui, sans-serif;
+
+  --color-orange-50: #fff1ef;
+  --color-orange-100: #ffe3df;
+  --color-orange-200: #ffc9c3;
+  --color-orange-300: #ffa8a0;
+  --color-orange-400: #ff827a;
+  --color-orange-500: #ff5e57;
+  --color-orange-600: #dc3d36;
+  --color-orange-700: #c8372f;
+  --color-orange-800: #a82e28;
+  --color-orange-900: #86241f;
+
+  /* 小さい文字が読みやすいよう、灰色を少し濃くする */
+  --color-stone-500: #6f625c;
+
+  --color-cream: #fff7e8;
+  --color-line: #f3e3cc;
+  --color-sun: #ffc83d;
+  --color-sun-d: #e0a800;
+  --color-butter: #fff0bf;
+  --color-mint: #27c4a0;
+  --color-mint-d: #0f8a6c;
+  --color-mintbg: #d9f6ee;
+  --color-ink: #3b2f2f;
+}
+
+/* 押せそうに見える、下に少し影のついたボタン・カード */
+@utility shadow-pop {
+  box-shadow: 0 4px 0 var(--color-line);
+}
+@utility shadow-pop-sm {
+  box-shadow: 0 3px 0 var(--color-line);
+}
+@utility btn-pop {
+  box-shadow: 0 3px 0 var(--color-orange-900);
+  transition: transform 0.05s;
+  &:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 var(--color-orange-900);
+  }
 }
 
 body {
-  background: #fafaf9;
-  color: #1c1917;
+  background: var(--color-cream);
+  color: var(--color-ink);
   font-family: var(--font-sans);
+}
+
+/* スマホでは、下のボタンに隠れないように余白を足す */
+.app-main {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .app-main {
+    padding-bottom: 3rem;
+  }
+}
+@media print {
+  .app-main {
+    padding-bottom: 0;
+  }
+  body {
+    background: #fff;
+  }
 }

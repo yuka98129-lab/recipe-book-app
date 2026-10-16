@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { setPlanChangeHandler } from "./plan-store";
+import { recordPlanOps, syncPlan } from "./plan-sync";
 import { getSnapshot, replaceFromRemote, setChangeHandler } from "./recipe-store";
 import { getSupabase, isSyncConfigured } from "./supabase";
 import {
@@ -38,6 +40,8 @@ export type SyncState = {
   /** サーバーにまだ送れていない変更の数 */
   pendingCount: number;
   message: string | null;
+  /** 献立の同期で出た問題(なければ null)。レシピの同期の状態とは別に持つ */
+  planMessage: string | null;
 };
 
 const INITIAL: SyncState = {
@@ -46,6 +50,7 @@ const INITIAL: SyncState = {
   lastSyncedAt: null,
   pendingCount: 0,
   message: null,
+  planMessage: null,
 };
 
 let state: SyncState = INITIAL;
@@ -214,7 +219,9 @@ export async function syncNow(): Promise<void> {
     const merged = mergeRemote(local, remote, readOutbox());
     if (JSON.stringify(merged) !== JSON.stringify(local)) replaceFromRemote(merged);
 
-    setState({ status: "idle", lastSyncedAt: Date.now(), message: null });
+    // 献立の同期。失敗しても、レシピの同期の結果(上の状態)は変えない
+    const planMessage = await syncPlan(sb, user.id);
+    setState({ status: "idle", lastSyncedAt: Date.now(), message: null, planMessage });
   } catch (err) {
     console.error("sync failed", err);
     setState({ status: "error", message: describeError(err) });
@@ -234,6 +241,10 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 function handleLocalChange(ops: PendingOp[]) {
   // ログインしていないときも記録する(あとでログインしたときに、この変更が失われないように)
   writeOutbox(addPendingOps(readOutbox(), ops));
+  scheduleSync();
+}
+
+function scheduleSync() {
   if (state.status === "disabled") return;
   if (flushTimer) clearTimeout(flushTimer);
   flushTimer = setTimeout(() => {
@@ -286,6 +297,10 @@ export function startSync() {
   }
 
   setChangeHandler(handleLocalChange);
+  setPlanChangeHandler((ops) => {
+    recordPlanOps(ops);
+    scheduleSync();
+  });
   setState({ pendingCount: readOutbox().length });
 
   sb.auth.onAuthStateChange((event, session) => {

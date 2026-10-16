@@ -1,3 +1,5 @@
+import type { NutritionEstimate } from "./nutrition";
+
 export type Ingredient = { name: string; quantity: string };
 
 /**
@@ -21,6 +23,10 @@ export type Recipe = {
   photoPath?: string;
   /** 調理時間(分、1〜1440の整数)。任意。後から追加した項目のため、無いレシピが多い */
   cookingMinutes?: number;
+  /** 何人分の材料か(1〜100の整数)。任意。後から追加した項目のため、無いレシピが多い */
+  servings?: number;
+  /** 栄養素の推定(AIによる目安)。任意。材料を直したあとは古くなるため、basis で見分ける */
+  nutrition?: NutritionEstimate;
   createdAt: number;
 };
 

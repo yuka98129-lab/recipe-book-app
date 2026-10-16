@@ -1,6 +1,8 @@
 import { DEFAULT_CATEGORIES } from "./constants";
 import { isCookingMinutes } from "./cooking-time";
 import { isPhotoPath } from "./photo-path";
+import { parseStoredNutrition } from "./nutrition";
+import { isServings } from "./servings";
 import type { Ingredient, IngredientGroup, Recipe } from "./types";
 
 export const BACKUP_APP = "recipe-book";
@@ -103,6 +105,8 @@ function parseRecipe(v: unknown): { recipe: Recipe } | { problem: string } {
       // 写真は書き出しファイルに含まれない(クラウド側にある)。パスの形が正しいときだけ引き継ぐ
       ...(isPhotoPath(v.photoPath) ? { photoPath: v.photoPath } : {}),
       ...(isCookingMinutes(v.cookingMinutes) ? { cookingMinutes: v.cookingMinutes } : {}),
+      ...(isServings(v.servings) ? { servings: v.servings } : {}),
+      ...(parseStoredNutrition(v.nutrition) ? { nutrition: parseStoredNutrition(v.nutrition) } : {}),
       createdAt: typeof v.createdAt === "number" ? v.createdAt : 0,
     },
   };

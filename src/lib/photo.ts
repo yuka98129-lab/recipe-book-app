@@ -10,8 +10,14 @@ export class PhotoError extends Error {}
 const MAX_SIDE = 1280;
 const JPEG_QUALITY = 0.82;
 
+/** レシピの読み取り用。文字が読めるよう、保存用より大きく・きれいにする */
+export const READ_IMAGE_OPTIONS = { maxSide: 1600, quality: 0.85 } as const;
+
 /** 撮った・選んだ写真を、JPEG に変換して小さくする(向きも直す) */
-export async function resizeImage(file: File): Promise<Blob> {
+export async function resizeImage(
+  file: File,
+  { maxSide = MAX_SIDE, quality = JPEG_QUALITY }: { maxSide?: number; quality?: number } = {},
+): Promise<Blob> {
   if (!file.type.startsWith("image/")) {
     throw new PhotoError("画像ファイルを選んでください。");
   }
@@ -25,7 +31,7 @@ export async function resizeImage(file: File): Promise<Blob> {
       throw new PhotoError("この写真は読み込めませんでした。JPEG や PNG の写真を選んでください。");
     }
   }
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
 
@@ -44,7 +50,7 @@ export async function resizeImage(file: File): Promise<Blob> {
   bitmap.close?.();
 
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY),
+    canvas.toBlob(resolve, "image/jpeg", quality),
   );
   if (!blob) throw new PhotoError("写真を変換できませんでした。");
   return blob;

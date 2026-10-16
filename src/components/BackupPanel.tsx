@@ -17,9 +17,9 @@ type Notice = { kind: "error" | "success"; text: string };
 type Pending = { backup: BackupFile; fileName: string };
 
 // スマホでは横幅いっぱいにして押しやすくする
-const baseButton = "w-full rounded-md border px-4 py-2.5 text-sm disabled:opacity-40 sm:w-auto";
-const buttonClass = `${baseButton} border-stone-300 bg-white hover:bg-stone-50`;
-const primaryButtonClass = `${baseButton} border-orange-600 bg-orange-600 text-white hover:bg-orange-700`;
+const baseButton = "w-full rounded-xl border-2 px-4 py-2.5 text-sm font-bold disabled:opacity-40 sm:w-auto";
+const buttonClass = `${baseButton} border-line bg-white shadow-pop-sm hover:bg-orange-50`;
+const primaryButtonClass = `${baseButton} border-orange-600 bg-orange-600 text-white hover:bg-orange-700 btn-pop`;
 const dangerButtonClass = `${baseButton} border-red-600 bg-red-600 text-white hover:bg-red-700`;
 
 function formatExportedAt(iso: string): string {
@@ -120,8 +120,8 @@ export function BackupPanel() {
   const previewNames = pending?.backup.recipes.slice(0, 5).map((r) => r.name) ?? [];
 
   return (
-    <section aria-labelledby="backup-heading" className="mt-10 border-t border-stone-200 pt-6">
-      <h2 id="backup-heading" className="text-base font-semibold">
+    <section aria-labelledby="backup-heading" className="rounded-3xl bg-white p-5 shadow-pop">
+      <h2 id="backup-heading" className="text-base font-black">
         バックアップ
       </h2>
       <p className="mt-1 text-sm text-stone-600">
@@ -159,7 +159,7 @@ export function BackupPanel() {
       {notice && (
         <p
           role={notice.kind === "error" ? "alert" : "status"}
-          className={`mt-4 rounded-md px-3 py-2 text-sm ${
+          className={`mt-4 rounded-xl px-3 py-2 text-sm ${
             notice.kind === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-800"
           }`}
         >
@@ -168,7 +168,7 @@ export function BackupPanel() {
       )}
 
       {pending && (
-        <div className="mt-4 space-y-3 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm">
+        <div className="mt-4 space-y-3 rounded-2xl border-2 border-orange-200 bg-orange-50 p-4 text-sm">
           <div>
             <p className="font-medium break-words">
               「{pending.fileName}」から {pending.backup.recipes.length}件のレシピを読み込みます。

@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useSync } from "@/hooks/use-sync";
 import { signIn, signOut, syncNow } from "@/lib/sync";
 
-const baseButton = "w-full rounded-md border px-4 py-2.5 text-sm disabled:opacity-40 sm:w-auto";
-const buttonClass = `${baseButton} border-stone-300 bg-white hover:bg-stone-50`;
-const primaryButtonClass = `${baseButton} border-orange-600 bg-orange-600 text-white hover:bg-orange-700`;
+const baseButton = "w-full rounded-xl border-2 px-4 py-2.5 text-sm font-bold disabled:opacity-40 sm:w-auto";
+const buttonClass = `${baseButton} border-line bg-white shadow-pop-sm hover:bg-orange-50`;
+const primaryButtonClass = `${baseButton} border-orange-600 bg-orange-600 text-white hover:bg-orange-700 btn-pop`;
 const inputClass =
-  "w-full rounded-md border border-stone-300 bg-white px-3 py-2.5 text-base sm:max-w-sm sm:text-sm";
+  "w-full rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-3 py-2.5 text-base sm:max-w-sm sm:text-sm";
 
 const formatTime = (ms: number) =>
   new Date(ms).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
@@ -37,8 +37,8 @@ export function SyncPanel() {
   const signedIn = sync.status === "idle" || sync.status === "syncing" || sync.status === "error";
 
   return (
-    <section aria-labelledby="sync-heading" className="mt-10 border-t border-stone-200 pt-6">
-      <h2 id="sync-heading" className="text-base font-semibold">
+    <section aria-labelledby="sync-heading" className="rounded-3xl bg-white p-5 shadow-pop">
+      <h2 id="sync-heading" className="text-base font-black">
         ほかの端末と同期する
       </h2>
 
@@ -75,7 +75,7 @@ export function SyncPanel() {
             </button>
           </form>
           {error && (
-            <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           )}

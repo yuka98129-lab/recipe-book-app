@@ -5,12 +5,19 @@ type Props = {
   onRemove?: () => void;
 };
 
+// タグごとに、ピンク・黄色・ミントのどれかになる(同じ名前は、いつも同じ色)
+const SOFT = [
+  "border-orange-200 bg-orange-100 text-orange-800",
+  "border-amber-200 bg-butter text-amber-900",
+  "border-teal-200 bg-mintbg text-teal-900",
+];
+const colorIndex = (label: string) => [...label].reduce((n, c) => n + c.charCodeAt(0), 0) % SOFT.length;
+
 export function TagChip({ label, selected, onClick, onRemove }: Props) {
-  const base =
-    "inline-flex items-center gap-1 rounded-full border px-2.5 text-sm";
+  const base = "inline-flex items-center gap-1 rounded-full border-2 px-2.5 text-sm font-bold";
   const color = selected
     ? "border-orange-600 bg-orange-600 text-white"
-    : "border-orange-200 bg-orange-50 text-orange-800";
+    : SOFT[colorIndex(label)];
 
   if (onClick) {
     return (

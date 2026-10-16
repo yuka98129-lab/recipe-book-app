@@ -1,34 +1,38 @@
-import type { Metadata } from "next";
-import Link from "next/link";
+import type { Metadata, Viewport } from "next";
+import { BottomNav, Logo, TopNav } from "@/components/AppNav";
 import { SyncBootstrap } from "@/components/SyncBootstrap";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "レシピ帳",
   description: "作りたい料理を、目的やタグですぐ探せるレシピ帳",
+  applicationName: "レシピ帳",
+  // ホーム画面に追加したとき、アプリのように全画面で開く
+  appleWebApp: { capable: true, title: "レシピ帳", statusBarStyle: "default" },
+  // 古い iPhone(iOS)向け。新しい書き方(mobile-web-app-capable)は、上の設定が出してくれる
+  other: { "apple-mobile-web-app-capable": "yes" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ff5e57",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col">
         <SyncBootstrap />
-        <header className="border-b border-stone-200 bg-white">
-          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-            <Link href="/" className="py-2 text-lg font-bold text-stone-900 sm:py-0">
-              レシピ帳
-            </Link>
-            <Link
-              href="/recipes/new"
-              className="rounded-md bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 sm:py-1.5"
-            >
-              ＋ レシピを登録
-            </Link>
+        <header className="bg-white shadow-[0_3px_0_var(--color-line)] print:hidden" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5">
+            <Logo />
+            <TopNav />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">
-          {children}
-        </main>
+        <main className="app-main mx-auto w-full max-w-4xl flex-1 px-4 py-6">{children}</main>
+        <BottomNav />
       </body>
     </html>
   );

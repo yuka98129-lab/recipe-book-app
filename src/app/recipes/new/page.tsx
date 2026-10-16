@@ -9,7 +9,7 @@ export default function NewRecipePage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-bold">レシピを登録</h1>
+      <h1 className="mb-6 text-xl font-black">レシピを登録</h1>
       <RecipeForm
         submitLabel="登録する"
         onSubmit={(input) => {
