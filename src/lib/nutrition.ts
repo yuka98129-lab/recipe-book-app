@@ -67,8 +67,10 @@ export function parseNutritionItems(raw: unknown): NutritionItem[] {
     if (!name) continue;
     const values = emptyValues();
     let any = false;
+    // AI の返答は栄養素が行に平らに並ぶ形、サーバー・保存データは values の中に入る形。どちらも読む
+    const src = isRecord(r.values) ? r.values : r;
     for (const n of NUTRIENTS) {
-      const v = num(r[n.key], n.max);
+      const v = num(src[n.key], n.max);
       if (v !== null) {
         values[n.key] = v;
         any = true;
@@ -98,11 +100,7 @@ export function parseAssumptions(raw: unknown): string[] {
 /** 保存済みの推定(localStorage・同期・バックアップ)を検証する。壊れていれば undefined(推定なし) */
 export function parseStoredNutrition(raw: unknown): NutritionEstimate | undefined {
   if (!isRecord(raw)) return undefined;
-  // 保存済みの行は、栄養素が values の中に入っている形(AI の返答は平らな形)なので、平らに直してから検証する
-  const flat = Array.isArray(raw.items)
-    ? raw.items.map((r) => (isRecord(r) && isRecord(r.values) ? { ...r.values, name: r.name, grams: r.grams, isVegetable: r.isVegetable, note: r.note } : r))
-    : [];
-  const items = parseNutritionItems(flat);
+  const items = parseNutritionItems(raw.items);
   if (items.length === 0) return undefined;
   if (typeof raw.basis !== "string" || raw.basis.length > 64) return undefined;
   if (typeof raw.estimatedAt !== "number" || !Number.isFinite(raw.estimatedAt)) return undefined;

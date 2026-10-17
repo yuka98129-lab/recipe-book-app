@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { parseNutritionItems } from "./nutrition";
 import { ReadError } from "./recipe-reader";
 import { buildNutritionContent, buildNutritionTool, estimateNutrition } from "./recipe-nutrition";
 
@@ -41,6 +42,15 @@ describe("estimateNutrition", () => {
     expect(r.items).toHaveLength(1);
     expect(r.assumptions).toEqual(["油は考えない"]);
     expect(create.mock.calls[0][0].tool_choice).toEqual({ type: "tool", name: "record_nutrition" });
+  });
+  it("サーバーが返す形を、画面側(nutrition-client)の読み取りでも読める(本番で「推定できませんでした」になった不具合の再発防止)", async () => {
+    const { client } = fake([{ type: "tool_use", id: "t", name: "record_nutrition", input: { items: [row], assumptions: [] } }]);
+    const r = await estimateNutrition(client, input, "m");
+    const overTheWire = JSON.parse(JSON.stringify(r)) as { items: unknown };
+    const onScreen = parseNutritionItems(overTheWire.items);
+    expect(onScreen).toHaveLength(1);
+    expect(onScreen[0].values.energyKcal).toBe(228);
+    expect(onScreen).toEqual(r.items);
   });
   it("何も読めなければ ReadError", async () => {
     await expect(estimateNutrition(fake([{ type: "text", text: "x" }]).client, input)).rejects.toThrow(ReadError);
