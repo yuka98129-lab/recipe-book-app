@@ -109,3 +109,8 @@ Photo upload (text-only), automatic recipe extraction from videos, meal planning
 ## Nutrition data shapes (bug lesson)
 
 - The AI's `record_nutrition` reply has nutrients **flat** on each item; the server (`/api/estimate-nutrition`), localStorage, sync and backups use `values: {...}` **nested**. `parseNutritionItems` accepts both. Any change to either shape must keep `recipe-nutrition.test.ts` ("server output re-parsed by client") passing, and e2e mocks of the API must use the real nested shape — a flat mock hid a production bug where every estimate ended in 「栄養素を推定できませんでした」.
+
+## Voice input (話して入れる)
+
+- `src/lib/speech.ts` (pure helpers: ctor lookup `SpeechRecognition`/`webkitSpeechRecognition`, `joinTranscript`, `speechErrorMessage`), `src/hooks/use-speech-input.ts` (ja-JP, continuous, interim; auto-restart up to 30 times unless the user stopped or a permission error occurred; `supported` via `useSyncExternalStore` so SSR renders "unsupported" first), UI in `RecipeReader.tsx` (appends final transcripts to the paste-text box; the existing 読み取る flow then structures it). `INSTRUCTIONS` in `recipe-reader.ts` has the spoken-language rule (fix 「さんこ」→「3個」, never invent missing items). Real Chromium exposes both constructors, so e2e fakes must override both (`e2e/speech.py`).
+- Audio is processed by the browser vendor's speech service, not by this app; the UI says so.

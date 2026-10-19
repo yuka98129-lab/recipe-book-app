@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSpeechInput } from "@/hooks/use-speech-input";
 import { useSync } from "@/hooks/use-sync";
 import {
   MAX_READ_IMAGES,
@@ -9,6 +10,7 @@ import {
   type ExtractedRecipe,
 } from "@/lib/recipe-extract";
 import { imageToReadDataUrl, requestRecipeReading } from "@/lib/recipe-reader-client";
+import { joinTranscript } from "@/lib/speech";
 
 type Props = {
   categories: string[];
@@ -31,6 +33,7 @@ export function RecipeReader({ categories, hasContent, onApply }: Props) {
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [uncertain, setUncertain] = useState<string[] | null>(null);
+  const speech = useSpeechInput((spoken) => setText((prev) => joinTranscript(prev, spoken, MAX_READ_TEXT_CHARS)));
 
   // 選んだ写真のプレビュー用URLは、使い終わったら解放する
   useEffect(() => {
@@ -50,6 +53,7 @@ export function RecipeReader({ categories, hasContent, onApply }: Props) {
   const canRead = !busy && (picked.length > 0 || text.trim().length >= MIN_READ_TEXT_CHARS);
 
   async function run() {
+    speech.stop();
     setConfirming(false);
     setBusy(true);
     setError("");
@@ -144,7 +148,7 @@ export function RecipeReader({ categories, hasContent, onApply }: Props) {
 
               <div>
                 <label htmlFor="read-text" className="mb-1 block font-medium">
-                  文章を貼りつける
+                  文章を貼りつける・声で話す
                   <span className="ml-2 text-xs font-normal text-stone-500">任意</span>
                 </label>
                 <textarea
@@ -152,11 +156,47 @@ export function RecipeReader({ categories, hasContent, onApply }: Props) {
                   value={text}
                   onChange={(e) => setText(e.target.value.slice(0, MAX_READ_TEXT_CHARS))}
                   rows={4}
-                  placeholder="レシピの文章をコピーして、ここに貼りつけます"
+                  placeholder="レシピの文章をコピーして貼りつけるか、「話して入れる」を押して、材料や作り方を話します"
                   disabled={busy}
                   className="w-full rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-3 py-2 outline-none focus:border-orange-500"
                 />
               </div>
+
+              {speech.supported ? (
+                <div>
+                  <button
+                    type="button"
+                    onClick={speech.listening ? speech.stop : speech.start}
+                    disabled={busy}
+                    aria-pressed={speech.listening}
+                    className={`btn-pop rounded-xl border-2 px-4 py-2.5 font-bold disabled:opacity-50 sm:py-2 ${
+                      speech.listening
+                        ? "border-orange-600 bg-orange-600 text-white hover:bg-orange-700"
+                        : "border-line bg-white hover:bg-orange-50"
+                    }`}
+                  >
+                    {speech.listening ? "■ 話し終わった(止める)" : "🎤 話して入れる"}
+                  </button>
+                  {speech.listening && (
+                    <p role="status" className="mt-2 rounded-xl bg-white px-3 py-2 text-stone-800">
+                      聞いています…材料と分量、作り方を、ふつうに話してください。
+                      {speech.interim && <span className="text-stone-500"> {speech.interim}</span>}
+                    </p>
+                  )}
+                  {speech.error && (
+                    <p role="alert" className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-red-700">
+                      {speech.error}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-stone-600">
+                    声は、お使いのブラウザの音声認識で文字になります(端末や、ブラウザの会社のサーバーに送られることがあります)。聞き間違いがあるので、文字になったあと、直してから「読み取る」を押せます。
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-600">
+                  このブラウザには、話して入れる機能がありません。キーボードにあるマイクのボタンで、声で入れられます。
+                </p>
+              )}
 
               {confirming ? (
                 <div className="rounded-xl bg-white p-3">
