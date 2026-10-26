@@ -86,3 +86,15 @@ describe("nearestByFridge", () => {
     expect(nearestByFridge(recipes, [], 3)).toEqual([]);
   });
 });
+
+describe("言い換え(冷蔵庫さがし)", () => {
+  it("漢字・かなの違いや、言い換えの材料でも、そろっているとみなす", () => {
+    expect(covers(["白滝"], "しらたき")).toBe(true);
+    expect(covers(["鶏肉"], "鶏もも肉")).toBe(true);
+    expect(covers(["ひき肉"], "合いびき肉")).toBe(false);
+    const rs = [r("肉豆腐", ["牛肉", "しらたき", "豆腐"])];
+    const m = findByFridge(rs, ["牛肉", "白滝", "とうふ"]);
+    expect(m).toHaveLength(1);
+    expect(m[0].missing).toEqual([]);
+  });
+});

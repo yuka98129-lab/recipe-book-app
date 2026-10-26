@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { usePlan } from "@/hooks/use-plan";
 import { useRecipes } from "@/hooks/use-recipes";
 import { useSync } from "@/hooks/use-sync";
+import { SeasonalPanel } from "./SeasonalPanel";
 import { addDays, formatDay, monthGrid, todayKey, WEEKDAYS, weekdayIndex } from "@/lib/plan";
 import { addPlanEntry, removePlanEntry, setPlanServings } from "@/lib/plan-store";
 import { MAX_SERVINGS, parseServings } from "@/lib/servings";
@@ -148,6 +149,9 @@ export function MealCalendar() {
   const [selected, setSelected] = useState(today);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(addDays(today, 6));
+  // 買い物リストに入れる日(とびとびでもよい)。献立が入っていない日があっても、かまわない
+  const [picked, setPicked] = useState<string[]>([]);
+  const togglePicked = (key: string) => setPicked((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key].sort()));
 
   const weeks = monthGrid(ym.y, ym.m);
   const byId = new Map(recipes.map((r) => [r.id, r]));
@@ -190,6 +194,46 @@ export function MealCalendar() {
         </div>
       </section>
 
+      <SeasonalPanel recipes={recipes} entries={entries} today={today} />
+
+      <section aria-label="買う日を選ぶ" className="rounded-2xl bg-white p-4 shadow-pop">
+        <h2 className="font-black">買い物の日を、日にちで選ぶ</h2>
+        <p className="mt-1 text-sm text-stone-600">
+          カレンダーで日にちをタップして、「この日を入れる」を押します。献立が入っていない日があっても、そのまま次の日を選べます(とびとびの日でもOK)。
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => togglePicked(selected)}
+            aria-pressed={picked.includes(selected)}
+            className={`min-h-[44px] rounded-xl px-4 text-sm font-black ${picked.includes(selected) ? "border-2 border-orange-600 bg-orange-50 text-orange-800" : "btn-pop bg-orange-600 text-white hover:bg-orange-700"}`}
+          >
+            {formatDay(selected)}を{picked.includes(selected) ? "外す" : "入れる"}
+          </button>
+          {picked.length > 0 && (
+            <button type="button" onClick={() => setPicked([])} className="py-2 text-sm text-stone-600 underline">
+              ぜんぶ外す
+            </button>
+          )}
+        </div>
+        {picked.length > 0 ? (
+          <>
+            <p className="mt-3 flex flex-wrap gap-1.5" aria-label="選んだ日">
+              {picked.map((k) => (
+                <button key={k} type="button" onClick={() => togglePicked(k)} aria-label={`${formatDay(k)}を外す`} className="rounded-full bg-mintbg px-3 py-1.5 text-xs font-black text-teal-900">
+                  {formatDay(k)} ✕
+                </button>
+              ))}
+            </p>
+            <Link href={`/plan/shopping?days=${picked.join(",")}`} className="btn-pop mt-3 inline-block rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-700">
+              選んだ{picked.length}日の買い物リストを見る
+            </Link>
+          </>
+        ) : (
+          <p className="mt-3 text-xs text-stone-600">まだ、選んでいません。</p>
+        )}
+      </section>
+
       <section aria-label="カレンダー">
         <div className="mb-2 flex items-center justify-between">
           <button type="button" onClick={() => move(-1)} aria-label="前の月" className="rounded-xl border-2 border-line bg-white font-bold shadow-pop-sm px-3 py-2 text-sm hover:bg-orange-50">◀</button>
@@ -208,7 +252,7 @@ export function MealCalendar() {
                 key={key}
                 type="button"
                 onClick={() => setSelected(key)}
-                aria-label={`${formatDay(key)}${names.length > 0 ? `、${names.length}品` : ""}`}
+                aria-label={`${formatDay(key)}${names.length > 0 ? `、${names.length}品` : ""}${picked.includes(key) ? "、買い物に入れる日" : ""}`}
                 aria-pressed={selected === key}
                 className={`flex min-h-16 flex-col items-stretch gap-0.5 rounded-xl bg-white p-1 text-left shadow-pop-sm sm:min-h-24 ${
                   selected === key ? "ring-4 ring-sun" : "hover:bg-orange-50"
@@ -217,6 +261,7 @@ export function MealCalendar() {
                 <span className={`text-xs font-extrabold ${key === today ? "inline-flex h-5 w-5 items-center justify-center self-start rounded-full bg-orange-600 text-white shadow-[0_2px_0_var(--color-orange-900)]" : dayColor(key)}`}>
                   {Number(key.slice(8))}
                 </span>
+                {picked.includes(key) && <span className="text-[11px] font-black text-teal-800">🛒買う</span>}
                 {names.slice(0, 3).map((n, i) => (
                   <span key={i} className="hidden truncate rounded-md bg-orange-50 px-1 text-[11px] font-bold leading-4 text-orange-900 sm:block">{n}</span>
                 ))}

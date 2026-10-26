@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { BottomNav, Logo, TopNav } from "@/components/AppNav";
 import { SyncBootstrap } from "@/components/SyncBootstrap";
+import { APPEARANCE_BOOT_SCRIPT } from "@/lib/appearance";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,7 +23,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className="h-full antialiased">
+    <html lang="ja" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        {/* 画面が出る前に、保存してある色・文字の大きさを反映する(色が、一瞬ちがう色で光らないように) */}
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col">
         <SyncBootstrap />
         <header className="bg-white shadow-[0_3px_0_var(--color-line)] print:hidden" style={{ paddingTop: "env(safe-area-inset-top)" }}>

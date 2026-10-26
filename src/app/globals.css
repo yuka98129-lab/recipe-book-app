@@ -2,12 +2,15 @@
 
 /* あざやか・ポップなデザイン。色は、ここだけで決める。
    orange を、トマト色(コーラル)の段階に置き換えているので、既存の orange-◯◯ の指定が、そのまま新しい色になる。
-   文字を載せる色(600〜900)は、読みやすさのため、見本より少し濃くしてある。 */
+   文字を載せる色(600〜900)は、読みやすさのため、見本より少し濃くしてある。
+   色(テーマ)は、設定で「コーラル / 赤 / ブルー」から選べる。html の data-theme で、下の色の組を差し替える
+   (そのため、色は、@theme inline ではなく、ふつうの @theme に置いている)。 */
 @theme inline {
   --font-sans:
     "Hiragino Maru Gothic ProN", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
     "Yu Gothic", Meiryo, system-ui, sans-serif;
-
+}
+@theme {
   --color-orange-50: #fff1ef;
   --color-orange-100: #ffe3df;
   --color-orange-200: #ffc9c3;
@@ -19,8 +22,8 @@
   --color-orange-800: #a82e28;
   --color-orange-900: #86241f;
 
-  /* 小さい文字が読みやすいよう、灰色を少し濃くする */
-  --color-stone-500: #6f625c;
+  /* 小さい文字が読みやすいよう、灰色を濃くする */
+  --color-stone-500: #5f544f;
 
   --color-cream: #fff7e8;
   --color-line: #f3e3cc;
@@ -30,7 +33,61 @@
   --color-mint: #27c4a0;
   --color-mint-d: #0f8a6c;
   --color-mintbg: #d9f6ee;
-  --color-ink: #3b2f2f;
+  --color-ink: #2f2525;
+}
+
+/* 赤。白い文字を載せる 600 は、コントラスト 5.6 */
+html[data-theme="red"] {
+  --color-orange-50: #fff0f0;
+  --color-orange-100: #ffdfdf;
+  --color-orange-200: #ffbebe;
+  --color-orange-300: #ff9797;
+  --color-orange-400: #f76868;
+  --color-orange-500: #e53935;
+  --color-orange-600: #c62828;
+  --color-orange-700: #b71c1c;
+  --color-orange-800: #8e1616;
+  --color-orange-900: #6b1010;
+  --color-cream: #fff4f2;
+  --color-line: #f1d9d6;
+  --color-ink: #2b1d1d;
+}
+
+/* ブルー。白い文字を載せる 600 は、コントラスト 6.0 */
+html[data-theme="blue"] {
+  --color-orange-50: #eef5ff;
+  --color-orange-100: #dbeaff;
+  --color-orange-200: #bcd7ff;
+  --color-orange-300: #8dbcff;
+  --color-orange-400: #5b9bf5;
+  --color-orange-500: #2f7be5;
+  --color-orange-600: #1d5fc7;
+  --color-orange-700: #1a4fa3;
+  --color-orange-800: #153f82;
+  --color-orange-900: #102f62;
+  --color-cream: #f0f6ff;
+  --color-line: #d3e3f6;
+  --color-ink: #1b2638;
+  --color-stone-500: #556070;
+}
+
+/* 文字の大きさ: ふつうでも、少し大きめ(17px)。設定で「大きめ」「とても大きい」にできる */
+html {
+  font-size: 106.25%;
+}
+html[data-size="large"] {
+  font-size: 118.75%;
+}
+html[data-size="xlarge"] {
+  font-size: 131.25%;
+}
+/* 小さい文字(注意書きなど)が、小さくなりすぎないように、下限を決める */
+.text-xs {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+.text-\[11px\] {
+  font-size: 0.75rem;
 }
 
 /* 押せそうに見える、下に少し影のついたボタン・カード */
@@ -53,6 +110,8 @@ body {
   background: var(--color-cream);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  line-height: 1.65;
+  letter-spacing: 0.015em;
 }
 
 /* スマホでは、下のボタンに隠れないように余白を足す */

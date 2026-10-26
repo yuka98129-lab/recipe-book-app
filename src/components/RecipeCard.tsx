@@ -1,12 +1,22 @@
 import Link from "next/link";
 import { formatMinutes } from "@/lib/cooking-time";
 import { formatServings } from "@/lib/servings";
+import type { MissingSub } from "@/lib/substitutes";
 import type { Recipe } from "@/lib/types";
 import { RecipePhoto } from "./RecipePhoto";
 import { TagChip } from "./TagChip";
 
 /** hits: 検索で、材料の名前に当たったもの(あれば「材料: …」と出す)。fridge: 冷蔵庫さがしの結果(使える材料・足りない材料) */
-export function RecipeCard({ recipe, hits = [], fridge }: { recipe: Recipe; hits?: string[]; fridge?: { used: string[]; missing: string[] } }) {
+export function RecipeCard({
+  recipe,
+  hits = [],
+  fridge,
+}: {
+  recipe: Recipe;
+  hits?: string[];
+  /** subs: 足りない材料のうち、手持ちで代用できるもの */
+  fridge?: { used: string[]; missing: string[]; subs?: MissingSub[] };
+}) {
   return (
     <Link
       href={`/recipes/${recipe.id}`}
@@ -42,6 +52,18 @@ export function RecipeCard({ recipe, hits = [], fridge }: { recipe: Recipe; hits
                 あと<span className="mx-1 text-sm font-black">{fridge.missing.join("・")}</span>
                 {fridge.missing.length === 1 ? "だけあれば作れます" : "があれば作れます"}
               </p>
+            )}
+            {fridge.subs && fridge.subs.length > 0 && (
+              <div className="break-words rounded-xl bg-mintbg px-2.5 py-1 text-teal-900">
+                <p className="font-black">
+                  {fridge.subs.length === fridge.missing.length ? "代わりのもので、作れます" : "代わりのものが、あります"}
+                </p>
+                {fridge.subs.map((s) => (
+                  <p key={s.name} className="font-bold">
+                    {s.name} → {s.sub.text}
+                  </p>
+                ))}
+              </div>
             )}
             <p className="break-words text-stone-600">いまある: {fridge.used.join("・")}</p>
           </div>

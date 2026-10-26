@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useRecipes } from "@/hooks/use-recipes";
 import { useSync } from "@/hooks/use-sync";
+import { useSynonymIndex } from "@/hooks/use-synonyms";
 import { filterRecipes, ingredientHits } from "@/lib/filter";
 import { GYOU, groupByGyou, needsReading, OTHER } from "@/lib/reading";
 import { fillMissingReadings } from "@/lib/reading-client";
@@ -15,6 +16,7 @@ import { TagChip } from "./TagChip";
 /** 検索・カテゴリー・タグの状態は URL に持つ(詳細から戻っても保たれる) */
 export function RecipeBrowser() {
   const { recipes, ready } = useRecipes();
+  const synonyms = useSynonymIndex();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -57,7 +59,7 @@ export function RecipeBrowser() {
   }, [recipes]);
 
   // (React Compiler がまとめて覚えるので、ここは useMemo にしない)
-  const filtered = filterRecipes(recipes, { q, category, tags });
+  const filtered = filterRecipes(recipes, { q, category, tags }, synonyms);
 
   // 冷蔵庫さがしは、カテゴリー・タグで絞った料理の中から探す
   const fridgeRecipes = fridgeOn ? filterRecipes(recipes, { q: "", category, tags }) : [];
@@ -285,7 +287,7 @@ export function RecipeBrowser() {
                 </h2>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {g.recipes.map((r) => (
-                    <RecipeCard key={r.id} recipe={r} hits={ingredientHits(r, q)} />
+                    <RecipeCard key={r.id} recipe={r} hits={ingredientHits(r, q, synonyms)} />
                   ))}
                 </div>
               </section>

@@ -173,3 +173,52 @@ describe("shoppingToText", () => {
     expect(t).toContain("■肉・魚\n・鶏もも肉 1枚");
   });
 });
+
+import { addExtras, cleanMemo, clearDoneExtras, getExtrasSnapshot, removeExtra, toggleExtra } from "./shopping-extras";
+
+describe("買い忘れメモ", () => {
+  it("保存された値を整える(昔の形=名前だけの文字列も読める)", () => {
+    expect(cleanMemo(["  卵 ", "卵", "", 3, null, "ＬＬ"])).toEqual([{ name: "卵", done: false }, { name: "LL", done: false }]);
+    expect(cleanMemo([{ name: "ゴミ袋", done: true }, { name: "ゴミ袋" }, { done: true }, { name: "x", done: "yes" }])).toEqual([
+      { name: "ゴミ袋", done: true },
+      { name: "x", done: false },
+    ]);
+    expect(cleanMemo("x")).toEqual([]);
+    expect(cleanMemo([{ name: "a".repeat(50) }])[0].name).toHaveLength(30);
+    expect(cleanMemo(Array.from({ length: 150 }, (_, i) => `n${i}`))).toHaveLength(100);
+  });
+  it("足す・チェック・消す・買えたものをまとめて消す(この端末に保存される)", () => {
+    localStorage.clear();
+    addExtras(["ゴミ袋", "ティッシュ", "ゴミ袋"]);
+    expect(getExtrasSnapshot().map((x) => x.name)).toEqual(["ゴミ袋", "ティッシュ"]);
+    toggleExtra("ゴミ袋");
+    expect(getExtrasSnapshot()[0].done).toBe(true);
+    expect(JSON.parse(localStorage.getItem("shopping:extras:v1")!)[0]).toEqual({ name: "ゴミ袋", done: true });
+    addExtras(["ゴミ袋"]); // もう一度、買うことになったら、チェックが外れる
+    expect(getExtrasSnapshot()[0].done).toBe(false);
+    toggleExtra("ティッシュ");
+    clearDoneExtras();
+    expect(getExtrasSnapshot().map((x) => x.name)).toEqual(["ゴミ袋"]);
+    removeExtra("ゴミ袋");
+    expect(getExtrasSnapshot()).toEqual([]);
+  });
+});
+
+describe("選んだ日だけの買い物リスト", () => {
+  const rec = { id: "r", name: "A", category: "主菜", tags: [], servings: undefined, ingredients: [{ name: "卵", quantity: "2個" }], seasonings: [], extraGroups: [], steps: [] } as unknown as Recipe;
+  const e = (id: string, date: string): PlanEntry => ({ id, date, recipeId: "r", servings: null });
+  const entries = [e("1", "2026-10-26"), e("2", "2026-10-27"), e("3", "2026-10-28")];
+  it("とびとびの日だけを数える(間の日は、入れない)。献立のない日があっても、よい", () => {
+    const l = buildShoppingList(entries, [rec], "2026-10-26", "2026-10-28", ["2026-10-26", "2026-10-28", "2026-10-30"]);
+    expect(l.dishCount).toBe(2);
+    expect(l.dayCount).toBe(3);
+    expect(l.groups[0].items[0].amounts).toEqual(["4個"]);
+  });
+  it("日を選ばないときは、これまでどおり、期間ぜんぶ", () => {
+    expect(buildShoppingList(entries, [rec], "2026-10-26", "2026-10-28").dishCount).toBe(3);
+  });
+  it("コピーの見出しは、選んだ日の言葉", () => {
+    const l = buildShoppingList(entries, [rec], "2026-10-26", "2026-10-28", ["2026-10-26"]);
+    expect(shoppingToText(l, "2026-10-26", "2026-10-26", new Set(), new Set(), "10月26日(月)")).toContain("買い物リスト(10月26日(月))");
+  });
+});

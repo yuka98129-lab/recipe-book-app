@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterRecipes, ingredientHits, type Filters } from "./filter";
+import { buildSynonymIndex, DEFAULT_SYNONYMS } from "./synonyms";
 import type { Recipe } from "./types";
 
 const recipe = (name: string, category: string, tags: string[]): Recipe => ({
@@ -81,14 +82,15 @@ describe("filterRecipes", () => {
 
 describe("材料での検索", () => {
   it("材料の名前でも探せる", () => {
-    expect(hit("白滝")).toEqual(["すき焼き"]);
+    expect(hit("白滝")).toEqual(["すき焼き", "野菜炒め"]); // 「しらたき」も、同じ材料(言い換え)
     expect(hit("キャベツ")).toEqual(["コールスロー", "野菜炒め"]);
   });
   it("スペースで区切ると、すべてを使う料理だけが出る(材料どうし・料理名と材料)", () => {
     expect(hit("キャベツ しらたき")).toEqual(["野菜炒め"]);
     expect(hit("キャベツ　にんじん")).toEqual(["コールスロー"]);
     expect(hit("すき焼き 長ねぎ")).toEqual(["すき焼き"]);
-    expect(hit("白滝 キャベツ")).toEqual([]);
+    expect(hit("白滝 キャベツ")).toEqual(["野菜炒め"]); // しらたき=白滝
+    expect(hit("牛肉 キャベツ")).toEqual([]);
   });
   it("調味料・追加グループの材料も探せる。ひらがな・カタカナの違いは気にしない", () => {
     expect(hit("ごま油")).toEqual(["コールスロー"]);
@@ -115,5 +117,23 @@ describe("ingredientHits(材料で見つかったものの印)", () => {
     expect(ingredientHits(sukiyaki, "すき焼き")).toEqual([]);
     expect(ingredientHits(sukiyaki, "")).toEqual([]);
     expect(ingredientHits(sukiyaki, "ねぎ すき焼き")).toEqual(["長ねぎ"]);
+  });
+});
+
+describe("言い換え(検索)", () => {
+  const shira = withIng("肉豆腐", ["牛肉", "しらたき", "豆腐"]);
+  it("標準の言い換えで、漢字でも、かなでも、見つかる", () => {
+    expect(filterRecipes([shira], { ...none, q: "白滝" }).map((r) => r.name)).toEqual(["肉豆腐"]);
+    expect(filterRecipes([shira], { ...none, q: "糸こんにゃく 豆腐" }).map((r) => r.name)).toEqual(["肉豆腐"]);
+    expect(ingredientHits(shira, "白滝")).toEqual(["しらたき"]);
+  });
+  it("自分で足した言い換えも使える", () => {
+    const r = withIng("青汁ゼリー", ["あおじる"], { name: "ゼリー" });
+    const idx = buildSynonymIndex([...DEFAULT_SYNONYMS, ["青汁", "あおじる"]]);
+    expect(filterRecipes([r], { ...none, q: "青汁" })).toHaveLength(0);
+    expect(filterRecipes([r], { ...none, q: "青汁" }, idx)).toHaveLength(1);
+  });
+  it("別の材料は、見つからない", () => {
+    expect(filterRecipes([shira], { ...none, q: "人参" })).toHaveLength(0);
   });
 });

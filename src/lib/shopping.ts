@@ -176,9 +176,13 @@ type Acc = {
  * 期間(from〜to、両端を含む)の献立から、買い物リストを作る。
  * - 作る人数がレシピの人数と違うときは、分量を人数の比で増減する(「少々」などはそのまま)
  */
-export function buildShoppingList(entries: PlanEntry[], recipes: Recipe[], from: string, to: string): ShoppingList {
-  const days = daysBetween(from, to);
-  const inRange = entries.filter((e) => e.date >= from && e.date <= to).sort((a, b) => a.date.localeCompare(b.date));
+export function buildShoppingList(entries: PlanEntry[], recipes: Recipe[], from: string, to: string, pickedDays?: string[]): ShoppingList {
+  // pickedDays があるときは、その日だけ(とびとびの日でもよい)。なければ from〜to のぜんぶの日
+  const days = pickedDays ? [...new Set(pickedDays)] : daysBetween(from, to);
+  const daySet = new Set(days);
+  const inRange = entries
+    .filter((e) => (pickedDays ? daySet.has(e.date) : e.date >= from && e.date <= to))
+    .sort((a, b) => a.date.localeCompare(b.date));
   const byId = new Map(recipes.map((r) => [r.id, r]));
   const acc = new Map<string, Acc>();
   const missing: { date: string }[] = [];
@@ -243,11 +247,22 @@ export function describeItem(item: ShoppingItem): string {
 }
 
 /** コピー用のテキスト */
-export function shoppingToText(list: ShoppingList, from: string, to: string, checked: Set<string> = new Set()): string {
-  const lines = [`買い物リスト(${formatDay(from)} 〜 ${formatDay(to)})`];
+export function shoppingToText(
+  list: ShoppingList,
+  from: string,
+  to: string,
+  checked: Set<string> = new Set(),
+  /** 「家にある」にしたもの(買わないので、コピーには入れない) */
+  atHome: Set<string> = new Set(),
+  /** 「選んだ日」で作ったときの、日付の言葉(あれば、期間のかわりに出す) */
+  daysLabel?: string,
+): string {
+  const lines = [`買い物リスト(${daysLabel ?? `${formatDay(from)} 〜 ${formatDay(to)}`})`];
   for (const g of list.groups) {
+    const items = g.items.filter((i) => !atHome.has(i.key));
+    if (items.length === 0) continue;
     lines.push("", `■${g.group}`);
-    for (const i of g.items) {
+    for (const i of items) {
       const d = describeItem(i);
       lines.push(`${checked.has(i.key) ? "✓" : "・"}${i.name}${d ? ` ${d}` : ""}`);
     }

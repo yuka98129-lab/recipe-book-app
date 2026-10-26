@@ -1,5 +1,6 @@
 import { toHiragana, compareRecipes } from "./reading";
 import { ingredientNames } from "./filter";
+import { DEFAULT_INDEX, type SynonymIndex } from "./synonyms";
 import type { Recipe } from "./types";
 
 // 「冷蔵庫にある材料」から、作れる料理をさがす。
@@ -36,12 +37,12 @@ export const splitHave = (text: string): string[] => cleanHave(text.split(/[\s�
  * 「ねぎ」と「長ねぎ」、「豚」と「豚肉」のように、片方がもう片方をふくむなら、同じものとみなす
  * (ただし、レシピ側が1文字の材料(卵・米など)は、手持ちの言葉に、それがふくまれるだけでは、同じとみなさない)。
  */
-export function covers(have: string[], ingredient: string): boolean {
+export function covers(have: string[], ingredient: string, synonyms: SynonymIndex = DEFAULT_INDEX): boolean {
   const b = norm(ingredient);
   if (!b) return false;
   return have.some((h) => {
     const a = norm(h);
-    return a.length > 0 && (b.includes(a) || (b.length >= 2 && a.includes(b)));
+    return a.length > 0 && (b.includes(a) || (b.length >= 2 && a.includes(b)) || synonyms.same(h, ingredient));
   });
 }
 
@@ -50,6 +51,8 @@ export type FridgeOptions = {
   includeSeasonings?: boolean;
   /** 足りない材料が、これより多い料理は出さない(初期値 2) */
   maxMissing?: number;
+  /** 材料の言い換え(初期値: 標準のもの) */
+  synonyms?: SynonymIndex;
 };
 
 /** 手持ちの材料で、作れる(または、あと少しで作れる)料理を、作りやすい順に返す。手持ちを1つも使わない料理は出さない */
@@ -57,14 +60,15 @@ export function findByFridge(recipes: Recipe[], haveInput: string[], opts: Fridg
   const have = cleanHave(haveInput);
   if (have.length === 0) return [];
   const maxMissing = opts.maxMissing ?? 2;
+  const syn = opts.synonyms ?? DEFAULT_INDEX;
   const out: FridgeMatch[] = [];
   for (const recipe of recipes) {
     const names = opts.includeSeasonings
       ? ingredientNames(recipe)
       : [...new Set([...recipe.ingredients, ...recipe.extraGroups.flatMap((g) => g.items)].map((i) => i.name.trim()).filter(Boolean))];
     if (names.length === 0) continue;
-    const used = names.filter((n) => covers(have, n));
-    const missing = names.filter((n) => !covers(have, n));
+    const used = names.filter((n) => covers(have, n, syn));
+    const missing = names.filter((n) => !covers(have, n, syn));
     if (used.length === 0 || missing.length > maxMissing) continue;
     out.push({ recipe, used, missing });
   }
@@ -74,18 +78,18 @@ export function findByFridge(recipes: Recipe[], haveInput: string[], opts: Fridg
 }
 
 /** 作れる(あと少しで作れる)料理がないとき用: 足りない数が多くても、手持ちを使う料理を、近い順に数件返す */
-export function nearestByFridge(recipes: Recipe[], haveInput: string[], limit = 5, opts: Pick<FridgeOptions, "includeSeasonings"> = {}): FridgeMatch[] {
+export function nearestByFridge(recipes: Recipe[], haveInput: string[], limit = 5, opts: Pick<FridgeOptions, "includeSeasonings" | "synonyms"> = {}): FridgeMatch[] {
   return findByFridge(recipes, haveInput, { ...opts, maxMissing: Infinity }).slice(0, limit);
 }
 
 /** 手持ちの候補にする、よく使われる材料(多い順。すでに入れたものは除く) */
-export function popularIngredients(recipes: Recipe[], have: string[], limit = 12): string[] {
+export function popularIngredients(recipes: Recipe[], have: string[], limit = 12, synonyms: SynonymIndex = DEFAULT_INDEX): string[] {
   const count = new Map<string, number>();
   for (const r of recipes) for (const n of [...r.ingredients, ...r.extraGroups.flatMap((g) => g.items)].map((i) => i.name.trim()).filter(Boolean)) {
     count.set(n, (count.get(n) ?? 0) + 1);
   }
   return [...count.entries()]
-    .filter(([n]) => !covers(have, n))
+    .filter(([n]) => !covers(have, n, synonyms))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"))
     .slice(0, limit)
     .map(([n]) => n);
