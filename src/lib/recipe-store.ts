@@ -4,6 +4,7 @@ import { isCookingMinutes } from "./cooking-time";
 import { isPhotoPath } from "./photo-path";
 import { parseStoredNutrition, type NutritionEstimate } from "./nutrition";
 import { isServings } from "./servings";
+import { cleanReading } from "./reading";
 import { diffToOps, type PendingOp } from "./sync-logic";
 import type { Ingredient, IngredientGroup, Recipe, RecipeInput } from "./types";
 
@@ -24,7 +25,8 @@ let cache: StoreSnapshot | null = null;
 const listeners = new Set<() => void>();
 
 /** 保存済みデータの形。seasonings と extraGroups は後から追加したため、古いレシピには無い */
-type StoredRecipe = Omit<Recipe, "seasonings" | "extraGroups" | "photoPath" | "cookingMinutes" | "servings" | "nutrition"> & {
+type StoredRecipe = Omit<Recipe, "seasonings" | "extraGroups" | "photoPath" | "cookingMinutes" | "servings" | "nutrition" | "reading"> & {
+  reading?: unknown;
   seasonings?: Ingredient[];
   extraGroups?: unknown;
   photoPath?: unknown;
@@ -70,11 +72,12 @@ function isGroup(v: unknown): v is IngredientGroup {
 // 古いレシピ(調味料・追加グループの項目自体がない)も新しい形で扱えるようにする
 // 写真のパスは、正しい形のときだけ残す(壊れた値は「写真なし」として扱う)
 const normalize = (r: StoredRecipe): Recipe => {
-  const { photoPath, cookingMinutes, servings, nutrition, ...rest } = r;
+  const { photoPath, cookingMinutes, servings, nutrition, reading, ...rest } = r;
   return {
     ...rest,
     seasonings: Array.isArray(r.seasonings) ? r.seasonings : [],
     extraGroups: Array.isArray(r.extraGroups) ? r.extraGroups.filter(isGroup) : [],
+    ...(cleanReading(reading) ? { reading: cleanReading(reading) } : {}),
     ...(isPhotoPath(photoPath) ? { photoPath } : {}),
     ...(isCookingMinutes(cookingMinutes) ? { cookingMinutes } : {}),
     ...(isServings(servings) ? { servings } : {}),
@@ -205,6 +208,21 @@ export function updateRecipe(id: string, input: RecipeInput) {
     categories: withCategory(current.categories, input.category),
   });
   notifyChange([{ type: "upsert", id }]);
+}
+
+/** よみがなだけをまとめて保存する(ほかの内容は変えない)。ひらがなにできないものは、無視する */
+export function setReadings(readings: Record<string, string>) {
+  const current = getSnapshot();
+  const ids: string[] = [];
+  const recipes = current.recipes.map((r) => {
+    const reading = cleanReading(readings[r.id]);
+    if (!reading || r.reading === reading) return r;
+    ids.push(r.id);
+    return { ...r, reading };
+  });
+  if (ids.length === 0) return;
+  commit({ recipes, categories: current.categories });
+  notifyChange(ids.map((id) => ({ type: "upsert", id }) as const));
 }
 
 /** 栄養素の推定だけを保存する(undefined なら推定を消す)。レシピのほかの内容は変えない */

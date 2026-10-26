@@ -11,6 +11,8 @@ export type IngredientGroup = { name: string; items: Ingredient[] };
 export type Recipe = {
   id: string;
   name: string;
+  /** 料理名のよみがな(ひらがな)。あいうえお順に並べるために使う。任意。後から追加した項目のため、無いレシピが多い */
+  reading?: string;
   category: string;
   tags: string[];
   ingredients: Ingredient[];

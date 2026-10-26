@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useRecipes } from "@/hooks/use-recipes";
-import { filterRecipes } from "@/lib/filter";
+import { useSync } from "@/hooks/use-sync";
+import { filterRecipes, ingredientHits } from "@/lib/filter";
+import { GYOU, groupByGyou, needsReading, OTHER } from "@/lib/reading";
+import { fillMissingReadings } from "@/lib/reading-client";
+import { FridgeFinder } from "./FridgeFinder";
 import { RecipeCard } from "./RecipeCard";
 import { TagChip } from "./TagChip";
 
@@ -17,17 +21,26 @@ export function RecipeBrowser() {
 
   const category = params.get("category") ?? "";
   const tags = useMemo(() => params.getAll("tag"), [params]);
+  // 「冷蔵庫の材料から探す」モード(いまある材料も URL に持つ)
+  const fridgeOn = params.get("fridge") === "1";
+  const have = useMemo(() => params.getAll("have"), [params]);
   // 入力欄は IME 変換中の表示を崩さないようローカル state で持ち、URL へ反映する
   const [q, setQ] = useState(params.get("q") ?? "");
 
-  function update(next: { q?: string; category?: string; tags?: string[] }) {
+  function update(next: { q?: string; category?: string; tags?: string[]; fridge?: boolean; have?: string[] }) {
     const sp = new URLSearchParams();
     const nq = next.q ?? q;
     const nc = next.category ?? category;
     const nt = next.tags ?? tags;
+    const nf = next.fridge ?? fridgeOn;
+    const nh = next.have ?? have;
     if (nq) sp.set("q", nq);
     if (nc) sp.set("category", nc);
     nt.forEach((t) => sp.append("tag", t));
+    if (nf) {
+      sp.set("fridge", "1");
+      nh.forEach((h) => sp.append("have", h));
+    }
     const qs = sp.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
@@ -43,12 +56,48 @@ export function RecipeBrowser() {
     return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [recipes]);
 
-  const filtered = useMemo(
-    () => filterRecipes(recipes, { q, category, tags }),
-    [recipes, q, category, tags],
-  );
+  // (React Compiler がまとめて覚えるので、ここは useMemo にしない)
+  const filtered = filterRecipes(recipes, { q, category, tags });
+
+  // 冷蔵庫さがしは、カテゴリー・タグで絞った料理の中から探す
+  const fridgeRecipes = fridgeOn ? filterRecipes(recipes, { q: "", category, tags }) : [];
 
   const hasFilter = q || category || tags.length > 0;
+
+  // あいうえお順に、あ行・か行…でまとめる
+  const groups = groupByGyou(filtered);
+  const present = new Set<string>(groups.map((g) => g.gyou));
+
+  // よみがながなくて(漢字まじりの名前)、「その他」に入っている料理
+  const missing = recipes.filter(needsReading).length;
+  const sync = useSync();
+  const signedIn = sync.status === "idle" || sync.status === "syncing" || sync.status === "error";
+  const [filling, setFilling] = useState<{ done: number; total: number } | null>(null);
+  const [fillMsg, setFillMsg] = useState("");
+
+  async function fillAll() {
+    setFilling({ done: 0, total: missing });
+    setFillMsg("");
+    try {
+      const n = await fillMissingReadings(recipes, (done, total) => setFilling({ done, total }));
+      setFillMsg(n > 0 ? `${n}件に、よみがなを入れました。まちがいは、レシピの編集画面で直せます。` : "よみがなを付けられませんでした。時間をおいて、もう一度試してください。");
+    } catch (err) {
+      setFillMsg(err instanceof Error ? err.message : "よみがなを入れられませんでした。");
+    } finally {
+      setFilling(null);
+    }
+  }
+
+  function setFridge(on: boolean) {
+    update({ fridge: on });
+  }
+
+  function jump(gyou: string) {
+    const el = document.getElementById(`gyou-${gyou}`);
+    if (!el) return;
+    const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+  }
 
   if (!ready) {
     return (
@@ -76,6 +125,26 @@ export function RecipeBrowser() {
 
   return (
     <div className="space-y-5">
+      <div role="group" aria-label="さがし方" className="flex gap-2">
+        {[
+          { on: false, label: "名前・材料で探す" },
+          { on: true, label: "冷蔵庫の材料から探す" },
+        ].map((m) => (
+          <button
+            key={m.label}
+            type="button"
+            aria-pressed={fridgeOn === m.on}
+            onClick={() => setFridge(m.on)}
+            className={`min-h-[44px] flex-1 rounded-full border-2 px-2 text-sm font-black ${
+              fridgeOn === m.on ? "border-orange-600 bg-orange-600 text-white" : "border-orange-200 bg-white text-orange-700 hover:bg-orange-50"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {!fridgeOn && (
       <div className="relative">
         <span aria-hidden className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" className="h-5 w-5">
@@ -90,11 +159,38 @@ export function RecipeBrowser() {
             setQ(e.target.value);
             update({ q: e.target.value });
           }}
-          placeholder="料理名・タグで検索"
-          aria-label="料理名・タグで検索"
+          placeholder="料理名・材料・タグで検索"
+          aria-label="料理名・材料・タグで検索"
           className="w-full rounded-full border-2 border-line bg-white py-2.5 pl-11 pr-4 shadow-pop-sm outline-none focus:border-orange-500"
         />
       </div>
+      )}
+
+      {!fridgeOn && (
+      <p className="-mt-3 text-xs text-stone-600">
+        例: 「白滝 キャベツ」のように、スペースで区切ると、すべてを使う料理が出ます(料理名・材料・タグが対象)。
+      </p>
+      )}
+
+      {!fridgeOn && missing > 0 && (
+        <div className="rounded-2xl bg-butter p-3 text-sm text-amber-900">
+          <p className="font-bold">よみがなが、まだない料理が{missing}件あります。</p>
+          <p className="mt-0.5 text-xs">あいうえお順では、「{OTHER}」に入っています。</p>
+          {signedIn ? (
+            <button
+              type="button"
+              onClick={fillAll}
+              disabled={filling !== null}
+              className="btn-pop mt-2 rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:opacity-60"
+            >
+              {filling ? `入れています… ${filling.done}/${filling.total}` : "AIでまとめて入れる"}
+            </button>
+          ) : (
+            <p className="mt-1 text-xs">ログインすると、AIでまとめて入れられます。1件ずつは、レシピの編集画面で、自分で入れられます。</p>
+          )}
+          {fillMsg && <p className="mt-2 text-xs font-bold">{fillMsg}</p>}
+        </div>
+      )}
 
       <div className="space-y-3">
         {/* スマホではラベルを上、チップを下に縦積みし、折り返してもラベル列とずれないようにする */}
@@ -142,7 +238,7 @@ export function RecipeBrowser() {
             type="button"
             onClick={() => {
               setQ("");
-              router.replace(pathname, { scroll: false });
+              update({ q: "", category: "", tags: [] });
             }}
             className="py-2 text-sm text-orange-700 underline sm:py-0"
           >
@@ -151,17 +247,53 @@ export function RecipeBrowser() {
         )}
       </div>
 
+      {fridgeOn ? (
+        <FridgeFinder recipes={fridgeRecipes} have={have} onChange={(h) => update({ have: h })} />
+      ) : (
+        <>
       <p className="text-sm font-bold text-stone-600">{filtered.length}件</p>
       {filtered.length === 0 ? (
         <p className="rounded-2xl bg-white shadow-pop p-6 text-center text-stone-600">
           条件に合うレシピがありません。
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((r) => (
-            <RecipeCard key={r.id} recipe={r} />
-          ))}
-        </div>
+        <>
+          <nav
+            aria-label="あいうえお順のジャンプ"
+            className="sticky top-0 z-20 -mx-4 flex justify-between gap-1 bg-cream/95 px-3 py-2 backdrop-blur"
+            style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top))" }}
+          >
+            {[...GYOU, OTHER].map((g) => (
+              <button
+                key={g}
+                type="button"
+                disabled={!present.has(g)}
+                onClick={() => jump(g)}
+                aria-label={`${g}へ`}
+                className="min-h-[40px] min-w-0 flex-1 rounded-full border-2 border-orange-200 bg-white px-0 text-sm font-black text-orange-700 hover:bg-orange-50 disabled:border-transparent disabled:bg-transparent disabled:text-stone-300"
+              >
+                {g === OTHER ? "他" : g[0]}
+              </button>
+            ))}
+          </nav>
+          <div className="space-y-5">
+            {groups.map((g) => (
+              <section key={g.gyou} id={`gyou-${g.gyou}`} className="scroll-mt-16">
+                <h2 className="mb-2 flex items-center gap-2 text-base font-black text-orange-700">
+                  <span className="rounded-full bg-orange-100 px-3 py-0.5">{g.gyou}</span>
+                  <span className="text-xs font-bold text-stone-500">{g.recipes.length}件</span>
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {g.recipes.map((r) => (
+                    <RecipeCard key={r.id} recipe={r} hits={ingredientHits(r, q)} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
+        </>
       )}
     </div>
   );

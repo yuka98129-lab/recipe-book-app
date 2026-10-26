@@ -434,3 +434,46 @@ describe("recipe-store: 保存失敗", () => {
     expect(store.getSnapshot().recipes.map((r) => r.name)).toEqual(["既存"]);
   });
 });
+
+describe("recipe-store: よみがな", () => {
+  it("読み込むとき、ひらがなにできないよみがなは捨てる(整えて残す)", async () => {
+    const base = { category: "主菜", tags: [], ingredients: [], steps: [], createdAt: 1 };
+    localStorage.setItem(
+      "recipes:v1",
+      JSON.stringify([
+        { ...base, id: "a", name: "親子丼", reading: "オヤコドン" },
+        { ...base, id: "b", name: "麻婆豆腐", reading: "麻婆" },
+        { ...base, id: "c", name: "カレー", reading: 5 },
+      ]),
+    );
+    const store = await loadStore();
+    const [a, b, c] = store.getSnapshot().recipes;
+    expect(a.reading).toBe("おやこどん");
+    expect(b.reading).toBeUndefined();
+    expect(c.reading).toBeUndefined();
+  });
+
+  it("setReadings は、よみがなだけをまとめて保存し、ほかの内容と、変更の通知(同期)を守る", async () => {
+    const store = await loadStore();
+    const a = store.addRecipe(input({ name: "親子丼" }));
+    const b = store.addRecipe(input({ name: "麻婆豆腐" }));
+    const handler = vi.fn();
+    store.setChangeHandler(handler);
+    store.setReadings({ [a.id]: "オヤコドン", [b.id]: "漢字", nobody: "ほげ" });
+    const byId = new Map(store.getSnapshot().recipes.map((r) => [r.id, r]));
+    expect(byId.get(a.id)).toMatchObject({ reading: "おやこどん", name: "親子丼", steps: ["煮る"] });
+    expect(byId.get(b.id)?.reading).toBeUndefined();
+    expect(handler).toHaveBeenCalledWith([{ type: "upsert", id: a.id }]);
+    handler.mockClear();
+    store.setReadings({ [a.id]: "おやこどん" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("編集で、よみがなを消せる(undefined を渡す)", async () => {
+    const store = await loadStore();
+    const a = store.addRecipe(input({ reading: "おやこどん" }));
+    store.updateRecipe(a.id, input({ reading: undefined }));
+    expect(store.getSnapshot().recipes[0].reading).toBeUndefined();
+    expect(JSON.parse(localStorage.getItem("recipes:v1")!)[0]).not.toHaveProperty("reading");
+  });
+});

@@ -7,6 +7,8 @@ import { MAX_TAGS, SUGGESTED_TAGS } from "@/lib/constants";
 import { MAX_COOKING_MINUTES, parseCookingMinutes } from "@/lib/cooking-time";
 import { cleanExtraGroups, cleanRows, nextRowAfter } from "@/lib/ingredient-groups";
 import { isPlainEnter } from "@/lib/keyboard";
+import { cleanReading, isKanaOnly } from "@/lib/reading";
+import { autoReading, requestReadings } from "@/lib/reading-client";
 import { MAX_SERVINGS, parseServings } from "@/lib/servings";
 import { PhotoError, removePhoto, resizeImage, uploadPhoto } from "@/lib/photo";
 import { extractionToFormValues, type ExtractedRecipe } from "@/lib/recipe-extract";
@@ -159,6 +161,9 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
   const { recipes, categories } = useRecipes();
 
   const [name, setName] = useState(initial?.name ?? "");
+  const [reading, setReading] = useState(initial?.reading ?? "");
+  const [readingBusy, setReadingBusy] = useState(false);
+  const [readingMsg, setReadingMsg] = useState("");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [newCategory, setNewCategory] = useState("");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
@@ -295,8 +300,18 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
     if (!groups.ok) return setError(groups.error);
     if (cleanSteps.length === 0) return setError("手順を1つ以上入力してください。");
 
+    let finalReading = "";
+    if (reading.trim()) {
+      finalReading = cleanReading(reading);
+      if (!finalReading) return setError("よみがなは、ひらがな(カタカナ)で入力してください。漢字や記号は入れられません。");
+    }
+
     setSaving(true);
     setError("");
+    // よみがなが空で、名前に漢字などがあるときは、AIに付けてもらう(ログイン中だけ。失敗しても、保存は続ける)
+    if (!finalReading && signedIn && !isKanaOnly(name.trim())) {
+      finalReading = await autoReading(name.trim());
+    }
     // 今回アップロードした写真。保存に失敗したら、取り残さないよう消す
     let uploaded: string | undefined;
     try {
@@ -308,6 +323,8 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
       // 写真を外した場合も確実に消えるよう、photoPath は(未設定でも)必ず渡す
       await onSubmit({
         name: name.trim(),
+        // 空のときも、キーは渡す(消したよみがなが残らないように)
+        reading: finalReading || undefined,
         category: finalCategory,
         tags,
         ingredients: cleanIngredients,
@@ -344,6 +361,43 @@ export function RecipeForm({ initial, submitLabel, onSubmit, onCancel }: Props) 
           onChange={(e) => setName(e.target.value)}
           className={inputClass}
         />
+        <label htmlFor="reading" className="mb-1 mt-3 block text-sm font-medium">
+          よみがな
+          <span className="ml-2 text-xs font-normal text-stone-500">あいうえお順に並べるため・ひらがな</span>
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="reading"
+            value={reading}
+            onChange={(e) => {
+              setReading(e.target.value);
+              setReadingMsg("");
+            }}
+            placeholder={signedIn ? "空のまま保存すると、AIが入れます" : "例: おやこどん"}
+            className={inputClass}
+          />
+          <button
+            type="button"
+            disabled={readingBusy || !name.trim()}
+            onClick={async () => {
+              setReadingBusy(true);
+              setReadingMsg("");
+              try {
+                const got = await requestReadings([{ id: "x", name: name.trim() }]);
+                if (got.x) setReading(got.x);
+                else setReadingMsg("よみがなを付けられませんでした。自分で入れてください。");
+              } catch (err) {
+                setReadingMsg(err instanceof Error ? err.message : "よみがなを入れられませんでした。");
+              } finally {
+                setReadingBusy(false);
+              }
+            }}
+            className="btn-pop shrink-0 rounded-xl border-2 border-orange-200 bg-white px-3 text-sm font-bold text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+          >
+            {readingBusy ? "入れています…" : "AIで入れる"}
+          </button>
+        </div>
+        {readingMsg && <p className="mt-1 text-sm text-red-700">{readingMsg}</p>}
       </div>
 
       <div>

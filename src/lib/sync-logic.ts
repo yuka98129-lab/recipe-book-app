@@ -2,6 +2,7 @@ import { isCookingMinutes } from "./cooking-time";
 import { isPhotoPath } from "./photo-path";
 import { parseStoredNutrition } from "./nutrition";
 import { isServings } from "./servings";
+import { cleanReading } from "./reading";
 import type { Recipe } from "./types";
 
 /**
@@ -111,6 +112,7 @@ export function fromRow(row: RecipeRow): Recipe | null {
     seasonings: Array.isArray(d.seasonings) ? (d.seasonings as Recipe["seasonings"]) : [],
     extraGroups: Array.isArray(d.extraGroups) ? (d.extraGroups as Recipe["extraGroups"]) : [],
     steps: d.steps as string[],
+    ...(cleanReading(d.reading) ? { reading: cleanReading(d.reading) } : {}),
     ...(isPhotoPath(d.photoPath) ? { photoPath: d.photoPath } : {}),
     ...(isCookingMinutes(d.cookingMinutes) ? { cookingMinutes: d.cookingMinutes } : {}),
     ...(isServings(d.servings) ? { servings: d.servings } : {}),

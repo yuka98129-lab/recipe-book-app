@@ -192,3 +192,11 @@ describe("mergeCategoryNames", () => {
     expect(mergeCategoryNames(["主菜", "副菜"], ["副菜", "お弁当"], [])).toEqual(["主菜", "副菜", "お弁当"]);
   });
 });
+
+describe("よみがな(バックアップ)", () => {
+  it("書き出して読み込むと、よみがなが残る。ひらがなにできない値は捨てる。古いファイル(よみがななし)も読める", () => {
+    const r = parseBackup(file({ recipes: [recipe("a", { reading: "れしぴえー" }), { ...recipe("b"), reading: "漢字" }, recipe("c")] }));
+    if (!r.ok) throw new Error("parse failed");
+    expect(r.backup.recipes.map((x) => x.reading)).toEqual(["れしぴえー", undefined, undefined]);
+  });
+});

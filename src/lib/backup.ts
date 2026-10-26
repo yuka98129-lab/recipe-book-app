@@ -3,6 +3,7 @@ import { isCookingMinutes } from "./cooking-time";
 import { isPhotoPath } from "./photo-path";
 import { parseStoredNutrition } from "./nutrition";
 import { isServings } from "./servings";
+import { cleanReading } from "./reading";
 import type { Ingredient, IngredientGroup, Recipe } from "./types";
 
 export const BACKUP_APP = "recipe-book";
@@ -103,6 +104,7 @@ function parseRecipe(v: unknown): { recipe: Recipe } | { problem: string } {
       extraGroups,
       steps: [...(v.steps as string[])],
       // 写真は書き出しファイルに含まれない(クラウド側にある)。パスの形が正しいときだけ引き継ぐ
+      ...(cleanReading(v.reading) ? { reading: cleanReading(v.reading) } : {}),
       ...(isPhotoPath(v.photoPath) ? { photoPath: v.photoPath } : {}),
       ...(isCookingMinutes(v.cookingMinutes) ? { cookingMinutes: v.cookingMinutes } : {}),
       ...(isServings(v.servings) ? { servings: v.servings } : {}),

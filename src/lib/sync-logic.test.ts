@@ -143,3 +143,12 @@ describe("toRow / fromRow", () => {
     expect(fromRow({ id: 1 as unknown as string, data: {} })).toBeNull();
   });
 });
+
+describe("よみがな(同期)", () => {
+  it("行にして戻すと、よみがなが残る。壊れた値は捨てる", () => {
+    const r = recipe("9", { reading: "きゅうきゅう" });
+    const row = toRow(r);
+    expect(fromRow({ id: row.id, data: row.data })?.reading).toBe("きゅうきゅう");
+    expect(fromRow({ id: "9", data: { ...row.data, reading: "漢字" } })?.reading).toBeUndefined();
+  });
+});
