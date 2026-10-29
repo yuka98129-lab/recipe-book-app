@@ -139,3 +139,7 @@ Photo upload (text-only), automatic recipe extraction from videos, meal planning
 - `seasonal.ts`: `SEASONAL` month table, `rankSeasonal`, `proposeMenu` (no repeats, seeded variety); `SeasonalPanel` in the meal calendar.
 - Shopping: `buildShoppingList(..., pickedDays?)` supports non-contiguous days (`?days=`); "家にある" state is `shopping:athome:v1` (per range); fridge list is remembered in `fridge:have:v1`. The 買い忘れメモ (`shopping-extras.ts`, key `shopping:extras:v1`, items `{name, done}`) is a separate frame, not merged into the plan-based list.
 - Theme: Tailwind v4 colors are in a non-inline `@theme`; `html[data-theme]` overrides the `--color-orange-*` scale, `data-size` changes root font size. `appearance.ts` has the boot script injected in `layout.tsx` (no flash).
+- Share: `recipe-share.ts` (`recipeToText` scales by the shown servings, never includes photoPath/internal fields; `lineShareUrl` returns null when too long) and `ShareRecipe.tsx` (navigator.share, line.me/R/share link, copy). Receiving side = the existing recipe reader (paste text).
+
+## Bento scene
+- `Recipe.bento?: "both" | "only"` (`src/lib/scene.ts`; absent = everyday dish). `inScene` drives the `?scene=daily|bento` filter in `RecipeBrowser` (daily hides `only`, bento shows `both` + `only`). `RecipeForm` always passes the `bento` key (possibly `undefined`) so edits can clear it. Same normalize/fromRow/parseBackup handling as `cookingMinutes` (stored inside the jsonb `data`, no SQL needed). Tests: `src/lib/scene.test.ts`.
